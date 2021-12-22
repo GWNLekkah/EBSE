@@ -4,3 +4,8 @@ keras
 sklearn
 pandas
 jira
+nltk
+unidecode
+contractions 
+word2number
+gensim
