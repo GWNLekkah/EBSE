@@ -1,7 +1,5 @@
 import argparse
-import csv
 import json
-from pprint import pprint
 
 import pandas as pd
 
@@ -16,20 +14,7 @@ def read_csv(path):
     return dt
 
 
-def key_dic(keys, jira):
-    dictionary = {'key': 'value'}
-
-    for original_key in keys:
-        issue_list = jira.search_issues('key in (' + original_key + ')',
-                                        fields='key, description',
-                                        maxResults=1000)
-
-        for issue in issue_list:
-            dictionary[issue.key] = original_key
-
-    return dictionary
-
-
+# Get issue metadata (field)
 def get_issue_var(fields, field, name):
     if hasattr(fields, name) and field is not None:
         return field
@@ -43,30 +28,34 @@ def main():
     args = parser.parse_args()
 
     # Read the issue keys into a dict
+    print('read issue keys from csv')
     dt = read_csv(args.csv_path)
 
     # Authenticate with the jira server
+    print('athenticate with server')
     jira = JIRA(APACHE_JIRA_SERVER, basic_auth=('Mohamed_Soliman',
                                                 'Smbam@2005'))
     # Store the issue keys in a comma separated string format
-    keys_dic = key_dic(dt.keys(), jira)
     keys_str = ','.join(dt.keys())
 
-    # Obtain the issue list
-    issue_list = jira.search_issues('key in (' + keys_str + ')',
-                                    fields="key, parent, summary, description,"
-                                           "attachment, comment, issuelinks, "
-                                           "issuetype, labels, priority, "
-                                           "resolution, status, subtasks, "
-                                           "votes, watches",
-                                    maxResults=1000)
+    # Obtain the issue list (single issue at a time to keep requests small)
+    print('searching issues')
+    issue_list = []
+    for key in dt.keys():
+        # Printing to give user updates about the progress
+        print('  ' + key)
+        issue = jira.search_issues('key=' + key,
+                                   fields="key, parent, summary, description,"
+                                          "attachment, comment, issuelinks, "
+                                          "issuetype, labels, priority, "
+                                          "resolution, status, subtasks, "
+                                          "votes, watches")
+        issue_list.extend(issue)
 
+    print('processing issues')
     json_list = []
     for issue in issue_list:
-        if hasattr(issue.fields, 'parent'):
-            parent_var = issue.fields.parent
-        else:
-            parent_var = ''
+        # Get the attachment count
         attcounter = 0
         if hasattr(issue.fields, 'attachment'):
             attach_var = issue.fields.attachment
@@ -74,20 +63,10 @@ def main():
                 if "pdf" in attach.filename or "doc" in attach.filename:
                     attcounter = attcounter + (attach.size / 1024)
 
-        if hasattr(issue.fields, 'summary') and issue.fields.summary is \
-                not None:
-            summary_var = issue.fields.summary
-        else:
-            summary_var = ''
-
-        if hasattr(issue.fields,
-                   'description') and issue.fields.description is not None:
-            desc_var = issue.fields.description
-        else:
-            desc_var = ""
-
+        # Get the comment count and text
         comments_size = 0
-        comments_text = ''
+        comments_count = 0
+        comments_text = []
         if hasattr(issue.fields,
                    'comment') and issue.fields.comment is not None:
             comments_var = issue.fields.comment.comments
@@ -97,21 +76,28 @@ def main():
                     continue
                 else:
                     comments_size = comments_size + len(comm_var.body)
-                    comments_text += '\n' + comm_var.body
-                    # print(comm_var.author.name)
+                    comments_count += 1
+                    comments_text.append(comm_var.body)
 
+        # Get the number of watchers
+        if hasattr(issue.fields,
+                   'watches') and issue.fields.watches is not None:
+            watch_count_var = issue.fields.watches.watchCount
+        else:
+            watch_count_var = 0
+
+        # Get information about the children
         children_issue_list = jira.search_issues('parent=' + issue.key,
                                                  fields="key,parent,"
                                                         "description,"
                                                         "attachment,"
-                                                        "comment",
-                                                 maxResults=1000)
+                                                        "comment")
 
         attcounter_children = 0
         desc_var_children = 0
         comments_size_children = 0
         for child_issue in children_issue_list:
-
+            # Get the attachments size
             if hasattr(child_issue.fields, 'attachment'):
                 attach_var = child_issue.fields.attachment
                 for attach in attach_var:
@@ -120,12 +106,14 @@ def main():
                         attcounter_children = attcounter_children + (
                                 attach.size / 1024)
 
+            # Get the description size
             if hasattr(child_issue.fields,
                        'description') and child_issue.fields.description \
                     is not None:
                 desc_var_child = child_issue.fields.description
                 desc_var_children = desc_var_children + len(desc_var_child)
 
+            # Get the comment size
             if hasattr(child_issue.fields,
                        'comment') and child_issue.fields.comment is not \
                     None:
@@ -134,46 +122,39 @@ def main():
                     comments_size_children = comments_size_children + len(
                         comm_var.body)
 
-        original_key = keys_dic[issue.key]
+        # Printing to give user info about the progress
+        print('  ' + issue.key)
 
-        print(issue.key)
-        # print('{},{},{},{},{},{},{},{},{}'.format(issue.key, parent_var,
-        #                                           desc_var,
-        #                                           comments_text,
-        #                                           attcounter,
-        #                                           comments_size,
-        #                                           desc_var_children,
-        #                                           attcounter_children,
-        #                                           comments_size_children))
         fields = issue.fields
 
+        # Create a dict and store it in the json list
         dictionary = {
             'key': issue.key,
-            'parent': parent_var,
-            'summary': summary_var,
-            'description': desc_var,
+            'parent': str(get_issue_var(fields, fields.parent, 'parent')),
+            'summary': get_issue_var(fields, fields.summary, 'summary'),
+            'description': get_issue_var(fields, fields.description,
+                                         'description'),
             'comments': comments_text,
             '#_attachments': attcounter,
-            'comment_size': comments_size,
-            'issuelinks': str(get_issue_var(fields, fields.issuelinks,
+            'comments_count': comments_count,
+            'issuelinks': len(get_issue_var(fields, fields.issuelinks,
                                             'issuelinks')),
             'issuetype': str(get_issue_var(fields, fields.issuetype,
                                            'issuetype')),
             'labels': get_issue_var(fields, fields.labels, 'labels'),
             'priority': str(get_issue_var(fields, fields.priority,
-                                       'priority')),
+                                          'priority')),
             'resolution': str(get_issue_var(fields, fields.resolution,
-                                        'resolution')),
+                                            'resolution')),
             'status': str(get_issue_var(fields, fields.status, 'status')),
-            'subtasks': get_issue_var(fields, fields.subtasks, 'subtasks'),
-            'votes': str(get_issue_var(fields, fields.votes, 'votes')),
-            'watches': str(get_issue_var(fields, fields.watches,
-                                         'watches')),
+            'subtasks': len(get_issue_var(fields, fields.subtasks,
+                                          'subtasks')),
+            'votes': get_issue_var(fields, fields.votes, 'votes'),
+            'watch_count': watch_count_var,
             'description_children': desc_var_children,
             '#_attachements_children': attcounter_children,
             'comment_size_children': comments_size_children
         }
-
         json_list.append(dictionary)
 
     with open('output.json', 'w') as json_file:
