@@ -15,9 +15,11 @@ def read_csv(path):
 
 
 # Get issue metadata (field)
-def get_issue_var(fields, field, name):
-    if hasattr(fields, name) and field is not None:
-        return field
+def get_issue_var(fields, name, is_int=False):
+    if hasattr(fields, name) and getattr(fields, name) is not None:
+        return getattr(fields, name)
+    if is_int:
+        return 0
     return ''
 
 
@@ -130,26 +132,20 @@ def main():
         # Create a dict and store it in the json list
         dictionary = {
             'key': issue.key,
-            'parent': str(get_issue_var(fields, fields.parent, 'parent')),
-            'summary': get_issue_var(fields, fields.summary, 'summary'),
-            'description': get_issue_var(fields, fields.description,
-                                         'description'),
+            'parent': str(get_issue_var(fields, 'parent')),
+            'summary': get_issue_var(fields, 'summary'),
+            'description': get_issue_var(fields, 'description'),
             'comments': comments_text,
             '#_attachments': attcounter,
             'comments_count': comments_count,
-            'issuelinks': len(get_issue_var(fields, fields.issuelinks,
-                                            'issuelinks')),
-            'issuetype': str(get_issue_var(fields, fields.issuetype,
-                                           'issuetype')),
-            'labels': get_issue_var(fields, fields.labels, 'labels'),
-            'priority': str(get_issue_var(fields, fields.priority,
-                                          'priority')),
-            'resolution': str(get_issue_var(fields, fields.resolution,
-                                            'resolution')),
-            'status': str(get_issue_var(fields, fields.status, 'status')),
-            'subtasks': len(get_issue_var(fields, fields.subtasks,
-                                          'subtasks')),
-            'votes': get_issue_var(fields, fields.votes, 'votes'),
+            'issuelinks': len(get_issue_var(fields, 'issuelinks')),
+            'issuetype': str(get_issue_var(fields, 'issuetype')),
+            'labels': get_issue_var(fields, 'labels'),
+            'priority': str(get_issue_var(fields, 'priority')),
+            'resolution': str(get_issue_var(fields, 'resolution')),
+            'status': str(get_issue_var(fields, 'status')),
+            'subtasks': len(get_issue_var(fields, 'subtasks')),
+            'votes': int(str(get_issue_var(fields, 'votes', is_int=True))),
             'watch_count': watch_count_var,
             'description_children': desc_var_children,
             '#_attachements_children': attcounter_children,
