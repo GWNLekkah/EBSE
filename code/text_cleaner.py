@@ -55,7 +55,8 @@ def normalize_text(text: str) -> typing.List[str]:
 def remove_formatting(text: str) -> str:
     text = re.sub(r'\[.*?\|.*?\]', 'LLLINK', text)
     text = re.sub(r'\[.*?\]', 'LLLINK', text)
-    text = re.sub(r'\{code.*?\}(.|\s)*?\{code\}', 'CCCODEBLOCK', text)
+    #text = re.sub(r'\{code.*?\}(.|\s)*?\{code\}', 'CCCODEBLOCK', text)
+    text = _remove_code_blocks(text)
     text = re.sub(r'\{\{.*?\}\}', 'IIINLINECODE', text)
     text = re.sub(r'\[\~[^\s]+\]', 'MMMENTION', text)
     text = re.sub(r'\{.*?\}', '', text)
@@ -66,6 +67,40 @@ def remove_formatting(text: str) -> str:
     text = re.sub(r'\<.*?\>', '', text)
     return text
 
+
+def _remove_code_blocks(text: str) -> str:
+    # Step 1: find all text markers
+    starts = list(re.finditer(r'\{code:.*?\}', text))
+    generic = list(re.finditer(r'\{code\}', text))
+    # Step 2: Filter out all equal objects
+    pure_starts = []
+    for match in starts:
+        for item in generic:
+            if match.group() == item.group() and match.start() == item.start():
+                break
+        else:
+            pure_starts.append(match)
+    # Step 3: Order all match objects
+    markers = [(s, True) for s in pure_starts] + [(s, False) for s in generic]
+    markers.sort(key=lambda x: x[0].start())
+    # Step 4: Remove code blocks, or resolve ambiguity
+    removals = []
+    while len(markers) >= 2:
+        (start, start_is_pure), (end, end_is_pure), *markers = markers
+        if end_is_pure:
+            # We have two starting tags; We ignore the second one
+            markers.insert(0, (start, start_is_pure))
+            continue
+        removals.append((start.start(), end.end()))
+    if markers:
+        marker, is_pure = markers.pop()
+        # assume this is an unmatched start; remove the entirety of the remaining string
+        removals.append((marker.start(), len(text)))
+    # Step 5: Remove parts from the string
+    for start, stop in reversed(removals):
+        text = f'{text[:start]}CCCODEBLOCK{text[stop+1:]}'
+    return text
+        
 
 def normalize_sentence(text: str) -> str:
     text = unidecode.unidecode(text)
@@ -205,6 +240,16 @@ public String getFoo()
         <another tag="attribute"/>
     </test>
 {code}
+
+{code}
+    // Some comments
+{code}
+
+{code}
+    unfinished
+
+
+Thhis is actual texdt, but it should be removed
 """
 
 print(normalize_text(format_test))
