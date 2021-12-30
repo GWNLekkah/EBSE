@@ -153,7 +153,7 @@ def main():
         }
         json_list.append(dictionary)
 
-    with open('output.json', 'w') as json_file:
+    with open('output.json', 'w+') as json_file:
         json.dump(json_list, json_file, indent=4)
 
 
