@@ -1,3 +1,6 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
 import tensorflow as tf
 import json
 
@@ -8,8 +11,10 @@ def main():
 
     with open('label_reader/architectural_labels.json') as file:
         labels = json.load(file)
+    with open('label_reader/non_architectural_labels.json') as file:
+        labels.extend(json.load(file))
 
-    num_of_issues = 10
+    num_of_issues = len(labels)
 
     labels = labels[:num_of_issues]
 
@@ -33,18 +38,18 @@ def main():
                                                   tf.convert_to_tensor(
                                                       labels)))
 
-    training = dataset.shuffle(num_of_issues).batch(8)
+    training = dataset.shuffle(num_of_issues).batch(16)
 
     inputs = tf.keras.Input(shape=(encoded_issues['row_len'], ), sparse=True)
     hidden = tf.keras.layers.Dense(256, activation='relu')(inputs)
-    outputs = tf.keras.layers.Dense(4)(hidden)
+    outputs = tf.keras.layers.Dense(4, activation='sigmoid')(hidden)
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     model.compile(optimizer='adam',
-                  loss='categorical_crossentropy',
+                  loss='binary_crossentropy',
                   metrics=['accuracy'])
 
-    model.fit(training, batch_size=8, epochs=5)
+    model.fit(training, batch_size=16, epochs=5)
     loss, accuracy = model.evaluate(training)
     print(loss, accuracy)
 
