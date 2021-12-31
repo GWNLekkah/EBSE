@@ -55,6 +55,8 @@ def normalize_text(text: str) -> typing.List[str]:
 def remove_formatting(text: str) -> str:
     text = re.sub(r'\[.*?\|.*?\]', 'LLLINK', text)
     text = re.sub(r'\[.*?\]', 'LLLINK', text)
+    text = re.sub(r'https?://\S+', 'LLLINK', text)
+    text = re.sub(r'org.\S+', 'LLLINK', text)
     #text = re.sub(r'\{code.*?\}(.|\s)*?\{code\}', 'CCCODEBLOCK', text)
     text = _remove_code_blocks(text)
     text = re.sub(r'\{\{.*?\}\}', 'IIINLINECODE', text)
