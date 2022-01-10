@@ -4,6 +4,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 import tensorflow as tf
 import json
 
+BINARY = True
+
 
 def main():
     with open('one_hot_encoder/encoded_issues.json') as file:
@@ -38,20 +40,43 @@ def main():
                                                   tf.convert_to_tensor(
                                                       labels)))
 
-    training = dataset.shuffle(num_of_issues).batch(16)
+    dataset.shuffle(len(labels))
+
+    size_train = int(0.8 * len(labels))
+    size_val = int(0.5 * (len(labels) - size_train))
+
+    dataset_train = dataset.take(size_train).shuffle(size_train).batch(64)
+    dataset_val = dataset.skip(size_train).take(size_val).shuffle(
+        size_val).batch(64)
+    dataset_test = dataset.skip(size_train + size_val).shuffle(len(labels) -
+                                                               size_train -
+                                                               size_val).batch(64)
 
     inputs = tf.keras.Input(shape=(encoded_issues['row_len'], ), sparse=True)
     hidden = tf.keras.layers.Dense(256, activation='relu')(inputs)
-    outputs = tf.keras.layers.Dense(4, activation='sigmoid')(hidden)
+    hidden = tf.keras.layers.Dense(128, activation='relu')(hidden)
+    hidden = tf.keras.layers.Dense(64, activation='relu')(hidden)
+    outputs = tf.keras.layers.Dense(8, activation='sigmoid')(hidden)
+    if BINARY:
+        outputs = tf.keras.layers.Dense(2, activation='sigmoid')(hidden)
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
-    model.compile(optimizer='adam',
-                  loss='binary_crossentropy',
-                  metrics=['accuracy'])
+    model.compile(optimizer=tf.keras.optimizers.Adam(),
+                  loss=tf.keras.losses.BinaryCrossentropy(),
+                  metrics=[tf.keras.metrics.Accuracy(),
+                           tf.keras.metrics.BinaryAccuracy(),
+                           tf.keras.metrics.CategoricalAccuracy(),
+                           tf.metrics.Precision(thresholds=0.5),
+                           tf.keras.metrics.Recall(thresholds=0.5)])
 
-    model.fit(training, batch_size=16, epochs=5)
-    loss, accuracy = model.evaluate(training)
-    print(loss, accuracy)
+    for _ in range(5):
+        model.fit(dataset_train,
+                  batch_size=64,
+                  epochs=1,
+                  validation_data=dataset_val)
+
+        result = model.evaluate(dataset_test)
+        print(dict(zip(model.metrics_names, result)))
 
 
 if __name__ == '__main__':
