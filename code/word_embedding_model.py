@@ -174,7 +174,7 @@ def main(binary: bool,
                            tf.keras.metrics.FalsePositives(thresholds=0.5),
                            tf.keras.metrics.FalseNegatives(thresholds=0.5)])
 
-    if use_crossfold_validation:
+    if not use_crossfold_validation:
         dataset_train, dataset_val, dataset_test = get_single_batch_data(data, labels)
         for _ in range(5):
             model.fit(dataset_train,
@@ -206,5 +206,5 @@ if __name__ == '__main__':
                         help='Enable K-fold cross-validation.')
     parser.add_argument('--splits', type=int, default=10,
                         help='Number of splits (K) to use for K-fold cross-validation.')
-    args = parser.parse_args(sys.argv)
+    args = parser.parse_args()
     main(args.binary, args.cross, args.splits)
