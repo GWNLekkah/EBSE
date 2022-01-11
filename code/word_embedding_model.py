@@ -174,7 +174,7 @@ def main(binary: bool,
                            tf.keras.metrics.FalsePositives(thresholds=0.5),
                            tf.keras.metrics.FalseNegatives(thresholds=0.5)])
 
-    if binary:
+    if use_crossfold_validation:
         dataset_train, dataset_val, dataset_test = get_single_batch_data(data, labels)
         for _ in range(5):
             model.fit(dataset_train,
