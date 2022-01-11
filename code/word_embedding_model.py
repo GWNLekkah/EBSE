@@ -1,14 +1,42 @@
+##############################################################################
+##############################################################################
+# Imports
+##############################################################################
+
+import argparse
+import json
 import os
 import random
+import sys
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 import tensorflow as tf
-import json
 from numpy import asarray
 from numpy import zeros
 
-BINARY = True
+
+##############################################################################
+##############################################################################
+# Raw Data Handling
+##############################################################################
+
+
+def load_raw_data():
+    """Load raw data from files"""
+    with open('word_embedding/word_embedding.json') as file:
+        word_embedding = json.load(file)
+    with open('label_reader/architectural_labels.json') as file:
+        labels = json.load(file)
+    with open('label_reader/non_architectural_labels.json') as file:
+        labels.extend(json.load(file))
+    return word_embedding, labels
+
+
+##############################################################################
+##############################################################################
+# Word Embedding
+##############################################################################
 
 
 def load_embedding(filename):
@@ -36,20 +64,36 @@ def get_weight_matrix(embedding, vocab):
     return weight_matrix
 
 
-def main():
-    with open('word_embedding/word_embedding.json') as file:
-        word_embedding = json.load(file)
+##############################################################################
+##############################################################################
+# Model utilities functions
+##############################################################################
 
-    with open('label_reader/architectural_labels.json') as file:
-        labels = json.load(file)
-    with open('label_reader/non_architectural_labels.json') as file:
-        labels.extend(json.load(file))
 
-    num_of_issues = len(labels)
+def get_model(binary: bool, word_embedding, embedding_vectors):
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.Embedding(word_embedding['vocab_size'], 100,
+                                        weights=[embedding_vectors],
+                                        input_length=word_embedding['sequence_len']))
+    model.add(tf.keras.layers.Conv1D(filters=32, kernel_size=8,
+                                     activation='relu'))
+    model.add(tf.keras.layers.MaxPooling1D(pool_size=2))
+    model.add(tf.keras.layers.Flatten())
+    model.add(tf.keras.layers.Dense(10, activation='relu'))
+    if binary:
+        model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
+    else:
+        model.add(tf.keras.layers.Dense(8, activation='sigmoid'))
+    return model
 
-    labels = labels[:num_of_issues]
-    data = word_embedding['data']
 
+##############################################################################
+##############################################################################
+# Data Preparation
+##############################################################################
+
+
+def get_single_batch_data(data, labels):
     c = list(zip(data, labels))
     random.shuffle(c)
     data, labels = zip(*c)
@@ -70,25 +114,52 @@ def main():
     dataset_test = dataset.skip(size_train + size_val).shuffle(len(labels) -
                                                                size_train -
                                                                size_val).batch(64)
+    return dataset_train, dataset_val, dataset_test
+
+
+##############################################################################
+##############################################################################
+# Metric Computation
+##############################################################################
+
+
+def accuracy(tp, tn, fp, fn):
+    return (tp + tn) / (tp + tn + fp + fn)
+
+
+def precision(tp, tn, fp, fn):
+    return tp / (tp + fp)
+
+
+def recall(tp, tn, fp, fn):
+    return tp / (tp + fn)
+
+
+def f_score(tp, tn, fp, fn):
+    prec = precision(tp, tn, fp, fn)
+    rec = recall(tp, tn, fp, fn)
+    return 2 * prec * rec / (prec + rec)
+
+
+##############################################################################
+##############################################################################
+# Main functions
+##############################################################################
+
+
+def main(binary: bool,
+         use_crossfold_validation: bool,
+         number_of_folds: int):
+    word_embedding, labels = load_raw_data()
+    num_of_issues = len(labels)
+    labels = labels[:num_of_issues]
+    data = word_embedding['data']
 
     raw_embedding = load_embedding('word_embedding/word2vec.txt')
     embedding_vectors = get_weight_matrix(raw_embedding, word_embedding[
         'word_index'])
 
-    model = tf.keras.models.Sequential()
-    model.add(tf.keras.layers.Embedding(word_embedding['vocab_size'], 100,
-                                        weights=[embedding_vectors],
-                                        input_length=word_embedding[
-                                        'sequence_len']))
-    model.add(tf.keras.layers.Conv1D(filters=32, kernel_size=8,
-                                     activation='relu'))
-    model.add(tf.keras.layers.MaxPooling1D(pool_size=2))
-    model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(10, activation='relu'))
-    if BINARY:
-        model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
-    else:
-        model.add(tf.keras.layers.Dense(8, activation='sigmoid'))
+    model = get_model(binary, word_embedding, embedding_vectors)
 
     # Other metrics
     # tf.keras.metrics.Accuracy()
@@ -103,18 +174,37 @@ def main():
                            tf.keras.metrics.FalsePositives(thresholds=0.5),
                            tf.keras.metrics.FalseNegatives(thresholds=0.5)])
 
-    for _ in range(5):
-        model.fit(dataset_train,
-                  batch_size=64,
-                  epochs=1,
-                  validation_data=dataset_val)
+    if binary:
+        dataset_train, dataset_val, dataset_test = get_single_batch_data(data, labels)
+        for _ in range(5):
+            model.fit(dataset_train,
+                      batch_size=64,
+                      epochs=1,
+                      validation_data=dataset_val)
 
-        results = model.evaluate(dataset_test)
+            results = model.evaluate(dataset_test)
 
-        correct = results[1] + results[2]
-        incorrect = results[3] + results[4]
-        print('test accuracy:', correct / (correct + incorrect))
+            correct = results[1] + results[2]
+            incorrect = results[3] + results[4]
+            print('test accuracy:', correct / (correct + incorrect))
+
+    else:
+        pass
+
+
+##############################################################################
+##############################################################################
+# Program Entry Point
+##############################################################################
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--binary', action='store_true', default=False,
+                        help='Enable binary classification mode.')
+    parser.add_argument('--cross', action='store_true', default=False,
+                        help='Enable K-fold cross-validation.')
+    parser.add_argument('--splits', type=int, default=10,
+                        help='Number of splits (K) to use for K-fold cross-validation.')
+    args = parser.parse_args(sys.argv)
+    main(args.binary, args.cross, args.splits)
