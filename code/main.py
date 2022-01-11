@@ -61,13 +61,19 @@ def main():
         outputs = tf.keras.layers.Dense(2, activation='sigmoid')(hidden)
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+    # Other metrics
+    # tf.keras.metrics.Accuracy()
+    # tf.keras.metrics.BinaryAccuracy()
+    # tf.keras.metrics.CategoricalAccuracy()
+    # tf.metrics.Precision(thresholds=0.5)
+    # tf.keras.metrics.Recall(thresholds=0.5)
     model.compile(optimizer=tf.keras.optimizers.Adam(),
-                  loss=tf.keras.losses.BinaryCrossentropy(),
-                  metrics=[tf.keras.metrics.Accuracy(),
-                           tf.keras.metrics.BinaryAccuracy(),
-                           tf.keras.metrics.CategoricalAccuracy(),
-                           tf.metrics.Precision(thresholds=0.5),
-                           tf.keras.metrics.Recall(thresholds=0.5)])
+                  loss=tf.keras.losses.CategoricalCrossentropy(),
+                  metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
+                           tf.keras.metrics.TrueNegatives(thresholds=0.5),
+                           tf.keras.metrics.FalsePositives(thresholds=0.5),
+                           tf.keras.metrics.FalseNegatives(thresholds=0.5)])
 
     for _ in range(5):
         model.fit(dataset_train,
@@ -75,8 +81,7 @@ def main():
                   epochs=1,
                   validation_data=dataset_val)
 
-        result = model.evaluate(dataset_test)
-        print(dict(zip(model.metrics_names, result)))
+        model.evaluate(dataset_test)
 
 
 if __name__ == '__main__':

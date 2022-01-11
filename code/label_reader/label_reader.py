@@ -26,7 +26,7 @@ def read_architectural():
         next(reader)
         for row in reader:
             if BINARY:
-                labels.append([0, 1])
+                labels.append([1])
                 continue
 
             is_executive = False
@@ -75,7 +75,7 @@ def read_non_architectural():
         next(reader)
         for _ in reader:
             if BINARY:
-                labels.append([1, 0])
+                labels.append([0])
                 continue
             label = [0] * 8
             label[0] = 1

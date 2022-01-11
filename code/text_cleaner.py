@@ -128,7 +128,7 @@ def normalize_sentence(text: str) -> str:
     #print(words)
     words = [word for word in words if word not in STOPWORDS]
     #print(words)
-    return ' '.join(words)
+    return words
 
 
 
