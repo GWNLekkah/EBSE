@@ -86,6 +86,20 @@ def get_model(binary: bool, word_embedding, embedding_vectors):
         model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
     else:
         model.add(tf.keras.layers.Dense(8, activation='sigmoid'))
+
+        # Other metrics
+        # tf.keras.metrics.Accuracy()
+        # tf.keras.metrics.BinaryAccuracy()
+        # tf.keras.metrics.CategoricalAccuracy()
+        # tf.metrics.Precision(thresholds=0.5)
+        # tf.keras.metrics.Recall(thresholds=0.5)
+        model.compile(optimizer=tf.keras.optimizers.Adam(),
+                      loss=tf.keras.losses.BinaryCrossentropy(),
+                      metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
+                               tf.keras.metrics.TrueNegatives(thresholds=0.5),
+                               tf.keras.metrics.FalsePositives(thresholds=0.5),
+                               tf.keras.metrics.FalseNegatives(thresholds=0.5)])
+
     return model
 
 
@@ -153,6 +167,26 @@ def f_score(tp, tn, fp, fn):
 
 ##############################################################################
 ##############################################################################
+# Model Training/Testing
+##############################################################################
+
+
+def train_and_test_model(model, dataset_train, dataset_val, dataset_test):
+    for _ in range(5):
+        model.fit(dataset_train,
+                  batch_size=64,
+                  epochs=1,
+                  validation_data=dataset_val)
+
+        results = model.evaluate(dataset_test)
+
+        correct = results[1] + results[2]
+        incorrect = results[3] + results[4]
+        print('test accuracy:', correct / (correct + incorrect))
+
+
+##############################################################################
+##############################################################################
 # Main functions
 ##############################################################################
 
@@ -171,37 +205,13 @@ def main(binary: bool,
     embedding_vectors = get_weight_matrix(raw_embedding, word_embedding[
         'word_index'])
 
-    model = get_model(binary, word_embedding, embedding_vectors)
-
-    # Other metrics
-    # tf.keras.metrics.Accuracy()
-    # tf.keras.metrics.BinaryAccuracy()
-    # tf.keras.metrics.CategoricalAccuracy()
-    # tf.metrics.Precision(thresholds=0.5)
-    # tf.keras.metrics.Recall(thresholds=0.5)
-    model.compile(optimizer=tf.keras.optimizers.Adam(),
-                  loss=tf.keras.losses.BinaryCrossentropy(),
-                  metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
-                           tf.keras.metrics.TrueNegatives(thresholds=0.5),
-                           tf.keras.metrics.FalsePositives(thresholds=0.5),
-                           tf.keras.metrics.FalseNegatives(thresholds=0.5)])
-
     if not use_crossfold_validation:
+        model = get_model(binary, word_embedding, embedding_vectors)
         dataset_train, dataset_val, dataset_test = get_single_batch_data(data,
                                                                          labels,
                                                                          test_size,
                                                                          validation_size)
-        for _ in range(5):
-            model.fit(dataset_train,
-                      batch_size=64,
-                      epochs=1,
-                      validation_data=dataset_val)
-
-            results = model.evaluate(dataset_test)
-
-            correct = results[1] + results[2]
-            incorrect = results[3] + results[4]
-            print('test accuracy:', correct / (correct + incorrect))
+        train_and_test_model(model, dataset_train, dataset_val, dataset_test)
 
     else:
         # https://medium.com/the-owl/k-fold-cross-validation-in-keras-3ec4a3a00538
@@ -227,18 +237,9 @@ def main(binary: bool,
             dataset_val = tf.data.Dataset.from_tensor_slices(
                 (dense_tensor_val, tf.convert_to_tensor(reduced_labels[test_index]))
             ).shuffle(len(reduced_labels[test_index]), reshuffle_each_iteration=True).batch(64)
+            model = get_model(binary, word_embedding, embedding_vectors)
 
-            for _ in range(5):
-                model.fit(dataset_train,
-                          batch_size=64,
-                          epochs=1,
-                          validation_data=dataset_val)
-
-                results = model.evaluate(dataset_test)
-
-                correct = results[1] + results[2]
-                incorrect = results[3] + results[4]
-                print('test accuracy:', correct / (correct + incorrect))
+            train_and_test_model(model, dataset_train, dataset_val, dataset_test)
 
             i += 1
 
