@@ -15,10 +15,12 @@ def read_csv(path):
 
 
 # Get issue metadata (field)
-def get_issue_var(fields, name, is_int=False):
+def get_issue_var(fields, name, field_type='str'):
     if hasattr(fields, name) and getattr(fields, name) is not None:
+        if field_type == 'bool':
+            return 1
         return getattr(fields, name)
-    if is_int:
+    if field_type == 'int' or field_type == 'bool':
         return 0
     return ''
 
@@ -58,17 +60,14 @@ def main():
     json_list = []
     for issue in issue_list:
         # Get the attachment count
-        attcounter = 0
+        attachment_count = 0
         if hasattr(issue.fields, 'attachment'):
-            attach_var = issue.fields.attachment
-            for attach in attach_var:
+            for attach in issue.fields.attachment:
                 if "pdf" in attach.filename or "doc" in attach.filename:
-                    attcounter = attcounter + (attach.size / 1024)
+                    attachment_count += 1
 
         # Get the comment count and text
-        comments_size = 0
-        comments_count = 0
-        comments_text = []
+        comment_list = []
         if hasattr(issue.fields,
                    'comment') and issue.fields.comment is not None:
             comments_var = issue.fields.comment.comments
@@ -77,9 +76,7 @@ def main():
                         comm_var.author.name or "Diff:" in comm_var.body:
                     continue
                 else:
-                    comments_size = comments_size + len(comm_var.body)
-                    comments_count += 1
-                    comments_text.append(comm_var.body)
+                    comment_list.append(comm_var.body)
 
         # Get the number of watchers
         if hasattr(issue.fields,
@@ -94,35 +91,7 @@ def main():
                                                         "description,"
                                                         "attachment,"
                                                         "comment")
-
-        attcounter_children = 0
-        desc_var_children = 0
-        comments_size_children = 0
-        for child_issue in children_issue_list:
-            # Get the attachments size
-            if hasattr(child_issue.fields, 'attachment'):
-                attach_var = child_issue.fields.attachment
-                for attach in attach_var:
-                    if "pdf" in attach.filename or "txt" in \
-                            attach.filename or "doc" in attach.filename:
-                        attcounter_children = attcounter_children + (
-                                attach.size / 1024)
-
-            # Get the description size
-            if hasattr(child_issue.fields,
-                       'description') and child_issue.fields.description \
-                    is not None:
-                desc_var_child = child_issue.fields.description
-                desc_var_children = desc_var_children + len(desc_var_child)
-
-            # Get the comment size
-            if hasattr(child_issue.fields,
-                       'comment') and child_issue.fields.comment is not \
-                    None:
-                comments_var = child_issue.fields.comment.comments
-                for comm_var in comments_var:
-                    comments_size_children = comments_size_children + len(
-                        comm_var.body)
+        children_count = len(children_issue_list)
 
         # Printing to give user info about the progress
         print('  ' + issue.key)
@@ -132,24 +101,24 @@ def main():
         # Create a dict and store it in the json list
         dictionary = {
             'key': issue.key,
-            'parent': str(get_issue_var(fields, 'parent')),
             'summary': get_issue_var(fields, 'summary'),
+            'summary_length': len(get_issue_var(fields, 'summary')),
             'description': get_issue_var(fields, 'description'),
-            'comments': comments_text,
-            '#_attachments': attcounter,
-            'comments_count': comments_count,
-            'issuelinks': len(get_issue_var(fields, 'issuelinks')),
+            'description_length': len(get_issue_var(fields, 'description')),
+            'comment_list': comment_list,
+            'comment_length': sum([len(comment) for comment in comment_list]),
+            '#_comments': len(comment_list),
+            '#_attachments': attachment_count,
+            '#_issuelinks': len(get_issue_var(fields, 'issuelinks')),
             'issuetype': str(get_issue_var(fields, 'issuetype')),
             'labels': get_issue_var(fields, 'labels'),
             'priority': str(get_issue_var(fields, 'priority')),
             'resolution': str(get_issue_var(fields, 'resolution')),
-            'status': str(get_issue_var(fields, 'status')),
-            'subtasks': len(get_issue_var(fields, 'subtasks')),
-            'votes': int(str(get_issue_var(fields, 'votes', is_int=True))),
-            'watch_count': watch_count_var,
-            'description_children': desc_var_children,
-            '#_attachements_children': attcounter_children,
-            'comment_size_children': comments_size_children
+            '#_subtasks': len(get_issue_var(fields, 'subtasks')),
+            '#_votes': int(str(get_issue_var(fields, 'votes', 'int'))),
+            '#_watches': watch_count_var,
+            'has_parent': get_issue_var(fields, 'parent', 'bool'),
+            '#_children': children_count
         }
         json_list.append(dictionary)
 
