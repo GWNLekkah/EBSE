@@ -87,18 +87,18 @@ def get_model(binary: bool, word_embedding, embedding_vectors):
     else:
         model.add(tf.keras.layers.Dense(8, activation='sigmoid'))
 
-        # Other metrics
-        # tf.keras.metrics.Accuracy()
-        # tf.keras.metrics.BinaryAccuracy()
-        # tf.keras.metrics.CategoricalAccuracy()
-        # tf.metrics.Precision(thresholds=0.5)
-        # tf.keras.metrics.Recall(thresholds=0.5)
-        model.compile(optimizer=tf.keras.optimizers.Adam(),
-                      loss=tf.keras.losses.BinaryCrossentropy(),
-                      metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
-                               tf.keras.metrics.TrueNegatives(thresholds=0.5),
-                               tf.keras.metrics.FalsePositives(thresholds=0.5),
-                               tf.keras.metrics.FalseNegatives(thresholds=0.5)])
+    # Other metrics
+    # tf.keras.metrics.Accuracy()
+    # tf.keras.metrics.BinaryAccuracy()
+    # tf.keras.metrics.CategoricalAccuracy()
+    # tf.metrics.Precision(thresholds=0.5)
+    # tf.keras.metrics.Recall(thresholds=0.5)
+    model.compile(optimizer=tf.keras.optimizers.Adam(),
+                  loss=tf.keras.losses.BinaryCrossentropy(),
+                  metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
+                           tf.keras.metrics.TrueNegatives(thresholds=0.5),
+                           tf.keras.metrics.FalsePositives(thresholds=0.5),
+                           tf.keras.metrics.FalseNegatives(thresholds=0.5)])
 
     return model
 
