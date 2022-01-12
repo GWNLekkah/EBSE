@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import random
+import statistics
 import sys
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -171,11 +172,15 @@ def f_score(tp, tn, fp, fn):
 ##############################################################################
 
 
-def train_and_test_model(model, dataset_train, dataset_val, dataset_test):
+def train_and_test_model(model,
+                         dataset_train,
+                         dataset_val,
+                         dataset_test,
+                         epochs):
     for _ in range(5):
         model.fit(dataset_train,
                   batch_size=64,
-                  epochs=1,
+                  epochs=epochs,
                   validation_data=dataset_val)
 
         results = model.evaluate(dataset_test)
@@ -183,6 +188,7 @@ def train_and_test_model(model, dataset_train, dataset_val, dataset_test):
         correct = results[1] + results[2]
         incorrect = results[3] + results[4]
         print('test accuracy:', correct / (correct + incorrect))
+        return {'accuracy': correct / (correct + incorrect)}
 
 
 ##############################################################################
@@ -195,7 +201,8 @@ def main(binary: bool,
          use_crossfold_validation: bool,
          number_of_folds: int,
          test_size: float,
-         validation_size: float):
+         validation_size: float,
+         epochs: int):
     word_embedding, labels = load_raw_data()
     num_of_issues = len(labels)
     labels = labels[:num_of_issues]
@@ -211,7 +218,7 @@ def main(binary: bool,
                                                                          labels,
                                                                          test_size,
                                                                          validation_size)
-        train_and_test_model(model, dataset_train, dataset_val, dataset_test)
+        train_and_test_model(model, dataset_train, dataset_val, dataset_test, epochs)
 
     else:
         # https://medium.com/the-owl/k-fold-cross-validation-in-keras-3ec4a3a00538
@@ -227,6 +234,7 @@ def main(binary: bool,
             (dense_tensor_test, tf.convert_to_tensor(test_labels))
         ).shuffle(len(test_labels), reshuffle_each_iteration=True).batch(64)
         i = 1
+        results = []
         for train_index, test_index in kfold.split(reduced_features, reduced_labels):
             print('Fold:', i)
             dense_tensor_train = tf.constant(reduced_features[train_index])
@@ -239,9 +247,16 @@ def main(binary: bool,
             ).shuffle(len(reduced_labels[test_index]), reshuffle_each_iteration=True).batch(64)
             model = get_model(binary, word_embedding, embedding_vectors)
 
-            train_and_test_model(model, dataset_train, dataset_val, dataset_test)
-
+            metrics = train_and_test_model(model,
+                                           dataset_train,
+                                           dataset_val,
+                                           dataset_test,
+                                           epochs)
+            results.append(metrics['accuracy'])
             i += 1
+
+        print(f'Average Accuracy: {statistics.mean(results)} '
+              f'(standard deviation: {statistics.stdev(results)})')
 
 ##############################################################################
 ##############################################################################
@@ -263,9 +278,12 @@ if __name__ == '__main__':
                         help=('Proportion of data used for validation. '
                               'Only used when not using K-fold cross-validation')
                         )
+    parser.add_argument('--epochs', type=int, default=5,
+                        help='Number of epochs used in training')
     args = parser.parse_args()
     main(args.binary,
          args.cross,
          args.splits,
          args.test_split_size,
-         args.validation_split_size)
+         args.validation_split_size,
+         args.epochs)
