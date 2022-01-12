@@ -11,7 +11,9 @@ import sys
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
+from sklearn import model_selection
 import tensorflow as tf
+import numpy
 from numpy import asarray
 from numpy import zeros
 
@@ -93,10 +95,15 @@ def get_model(binary: bool, word_embedding, embedding_vectors):
 ##############################################################################
 
 
-def get_single_batch_data(data, labels):
+def shuffle_raw_data(data, labels):
     c = list(zip(data, labels))
     random.shuffle(c)
     data, labels = zip(*c)
+    return data, labels
+
+
+def get_single_batch_data(data, labels, test_size, validation_size):
+    data, labels = shuffle_raw_data(data, labels)
 
     dense_tensor = tf.constant(data)
     dataset = tf.data.Dataset.from_tensor_slices((dense_tensor,
@@ -105,8 +112,11 @@ def get_single_batch_data(data, labels):
 
     dataset = dataset.shuffle(len(labels), reshuffle_each_iteration=True)
 
-    size_train = int(0.6 * len(labels))
-    size_val = int(0.5 * (len(labels) - size_train))
+    #size_train = int(0.6 * len(labels))
+    #size_val = int(0.5 * (len(labels) - size_train))
+
+    size_train = int((1 - test_size - validation_size) * len(labels))
+    size_val = int(validation_size * len(labels))
 
     dataset_train = dataset.take(size_train).shuffle(size_train).batch(64)
     dataset_val = dataset.skip(size_train).take(size_val).shuffle(
@@ -149,7 +159,9 @@ def f_score(tp, tn, fp, fn):
 
 def main(binary: bool,
          use_crossfold_validation: bool,
-         number_of_folds: int):
+         number_of_folds: int,
+         test_size: float,
+         validation_size: float):
     word_embedding, labels = load_raw_data()
     num_of_issues = len(labels)
     labels = labels[:num_of_issues]
@@ -175,7 +187,10 @@ def main(binary: bool,
                            tf.keras.metrics.FalseNegatives(thresholds=0.5)])
 
     if not use_crossfold_validation:
-        dataset_train, dataset_val, dataset_test = get_single_batch_data(data, labels)
+        dataset_train, dataset_val, dataset_test = get_single_batch_data(data,
+                                                                         labels,
+                                                                         test_size,
+                                                                         validation_size)
         for _ in range(5):
             model.fit(dataset_train,
                       batch_size=64,
@@ -189,8 +204,43 @@ def main(binary: bool,
             print('test accuracy:', correct / (correct + incorrect))
 
     else:
-        pass
+        # https://medium.com/the-owl/k-fold-cross-validation-in-keras-3ec4a3a00538
+        data, labels = shuffle_raw_data(data, labels)
+        kfold = model_selection.StratifiedKFold(number_of_folds, shuffle=True)
+        test_data_length = int(test_size * len(labels))
+        test_labels = labels[:test_data_length]
+        test_features = data[:test_data_length]
+        reduced_labels = numpy.array(labels[test_data_length:])
+        reduced_features = numpy.array(data[test_data_length:])
+        dense_tensor_test = tf.constant(test_features)
+        dataset_test = tf.data.Dataset.from_tensor_slices(
+            (dense_tensor_test, tf.convert_to_tensor(test_labels))
+        ).shuffle(len(test_labels), reshuffle_each_iteration=True).batch(64)
+        i = 1
+        for train_index, test_index in kfold.split(reduced_features, reduced_labels):
+            print('Fold:', i)
+            dense_tensor_train = tf.constant(reduced_features[train_index])
+            dataset_train = tf.data.Dataset.from_tensor_slices(
+                (dense_tensor_train, tf.convert_to_tensor(reduced_labels[train_index]))
+            ).shuffle(len(reduced_labels[train_index]), reshuffle_each_iteration=True).batch(64)
+            dense_tensor_val = tf.constant(reduced_features[test_index])
+            dataset_val = tf.data.Dataset.from_tensor_slices(
+                (dense_tensor_val, tf.convert_to_tensor(reduced_labels[test_index]))
+            ).shuffle(len(reduced_labels[test_index]), reshuffle_each_iteration=True).batch(64)
 
+            for _ in range(5):
+                model.fit(dataset_train,
+                          batch_size=64,
+                          epochs=1,
+                          validation_data=dataset_val)
+
+                results = model.evaluate(dataset_test)
+
+                correct = results[1] + results[2]
+                incorrect = results[3] + results[4]
+                print('test accuracy:', correct / (correct + incorrect))
+
+            i += 1
 
 ##############################################################################
 ##############################################################################
@@ -206,5 +256,15 @@ if __name__ == '__main__':
                         help='Enable K-fold cross-validation.')
     parser.add_argument('--splits', type=int, default=10,
                         help='Number of splits (K) to use for K-fold cross-validation.')
+    parser.add_argument('--test-split-size', type=float, default=0.1,
+                        help='Proportion of the data that is used for testing')
+    parser.add_argument('--validation-split-size', type=float, default=0.1,
+                        help=('Proportion of data used for validation. '
+                              'Only used when not using K-fold cross-validation')
+                        )
     args = parser.parse_args()
-    main(args.binary, args.cross, args.splits)
+    main(args.binary,
+         args.cross,
+         args.splits,
+         args.test_split_size,
+         args.validation_split_size)
