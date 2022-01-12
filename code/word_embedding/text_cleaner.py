@@ -13,12 +13,14 @@ import re
 import string
 import typing
 
+import gensim.downloader
 import nltk.corpus
 import nltk.stem
 import nltk.stem.porter 
 import nltk.tokenize
 import contractions
 import unidecode
+import word2number
 
 
 STOPWORDS = set(nltk.corpus.stopwords.words('english'))

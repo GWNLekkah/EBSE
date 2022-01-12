@@ -17,9 +17,8 @@ def main():
     with open('../issuedata_extractor/non_architectural_issues.json') as file:
         issues_dict += json.load(file)
 
-    str_keys = ['summary', 'description', 'issuetype', 'priority',
-                'resolution', 'status']
-    list_keys = ['comments', 'labels']
+    str_keys = ['summary', 'description']
+    list_keys = ['comment_list']
 
     all_texts = []
     all_tokens = []

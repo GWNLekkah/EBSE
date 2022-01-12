@@ -8,7 +8,6 @@ import json
 import os
 import random
 import statistics
-import sys
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -17,6 +16,7 @@ import tensorflow as tf
 import numpy
 from numpy import asarray
 from numpy import zeros
+import keras.activations
 
 
 ##############################################################################
@@ -104,6 +104,52 @@ def get_model(binary: bool, word_embedding, embedding_vectors):
     return model
 
 
+def get_metadata_model(binary: bool,
+                       issue_type_length: int,
+                       resolution_length: int,
+                       label_lengths: list[int]):
+    # Inputs for the model:
+    # summary length            int
+    # description length        int
+    # comment length            int
+    # number of comments        int
+    # number of attachments     int
+    # number of issue links     int
+    # priority                  int
+    # number of subtasks        int
+    # number of votes           int
+    # number of watches         int
+    # number of children        int
+    # has parent                bool (int)
+    # issue type                vector[int]
+    # resolution                vector[int]
+    # labels                    list[vector[int]]
+    #
+    # Totals:
+    #   12 int fields
+    #   3 variable fields
+    feature_vector_length = (12 +
+                             issue_type_length +
+                             resolution_length +
+                             sum(label_lengths, start=int()))
+    inputs = tf.keras.layers.Input(shape=(feature_vector_length,))
+    hidden1 = tf.keras.layers.Dense(64,
+                                    activation=keras.activations.relu,
+                                    use_bias=True)(inputs)
+    outputs = tf.keras.layers.Dence(1 if binary else 8,
+                                    activation=keras.activations.sigmoid,
+                                    use_bias=True)(hidden1)
+    model = keras.models.Model(inputs=[inputs], output=outputs)
+    loss = tf.keras.losses.BinaryCrossentropy() if binary else tf.keras.optimizers.CrossEntropy()
+    model.compile(optimizer=tf.keras.optimizers.Adam(),
+                  loss=loss,
+                  metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
+                           tf.keras.metrics.TrueNegatives(thresholds=0.5),
+                           tf.keras.metrics.FalsePositives(thresholds=0.5),
+                           tf.keras.metrics.FalseNegatives(thresholds=0.5)])
+    return model
+
+
 ##############################################################################
 ##############################################################################
 # Data Preparation
@@ -127,8 +173,8 @@ def get_single_batch_data(data, labels, test_size, validation_size):
 
     dataset = dataset.shuffle(len(labels), reshuffle_each_iteration=True)
 
-    #size_train = int(0.6 * len(labels))
-    #size_val = int(0.5 * (len(labels) - size_train))
+    # size_train = int(0.6 * len(labels))
+    # size_val = int(0.5 * (len(labels) - size_train))
 
     size_train = int((1 - test_size - validation_size) * len(labels))
     size_val = int(validation_size * len(labels))
@@ -257,6 +303,7 @@ def main(binary: bool,
 
         print(f'Average Accuracy: {statistics.mean(results)} '
               f'(standard deviation: {statistics.stdev(results)})')
+
 
 ##############################################################################
 ##############################################################################

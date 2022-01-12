@@ -2,9 +2,9 @@ import json
 
 
 def main():
-    with open('../vocab_creator/vocab.json') as file:
+    with open('../vocab_creator/vocab_main.json') as file:
         vocab = json.load(file)
-    with open('../vocab_creator/occurrences.json') as file:
+    with open('../vocab_creator/occurrences_main.json') as file:
         occurrences = json.load(file)
 
     print('before', len(vocab))
