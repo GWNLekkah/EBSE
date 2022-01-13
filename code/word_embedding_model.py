@@ -8,6 +8,7 @@ import json
 import os
 import random
 import statistics
+import sys
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -28,13 +29,13 @@ import keras.activations
 def load_raw_data():
     """Load raw data from files"""
     with open('transformed.json') as file:
-        data = json.load(file)
+        issues = json.load(file)
     return (
-        data['embedding'],
-        data['metadata'],
-        data['labels'],
-        data['issue_type'],
-        data['resolution']
+        [data['embedded_text'] for data in issues],
+        [data['metadata'] for data in issues],
+        [data['labels'] for data in issues],
+        [data['issue_type'] for data in issues],
+        [data['resolution'] for data in issues]
     )
 
 
@@ -43,8 +44,12 @@ def load_metadata():
         return json.load(file)
 
 
-def load_labels():
-    pass
+def load_labels(binary):
+    with open('labels.json') as file:
+        labels = json.load(file)
+    if binary:
+        return labels['binary']
+    return labels['groups_8']
 
 
 ##############################################################################
@@ -115,10 +120,7 @@ def get_model(binary: bool, word_embedding, embedding_vectors):
     return model
 
 
-def get_metadata_model(binary: bool,
-                       issue_type_length: int,
-                       resolution_length: int,
-                       label_lengths: list[int]):
+def get_metadata_model(binary: bool, feature_vector_length: int):
     # Inputs for the model:
     # summary length            int
     # description length        int
@@ -139,18 +141,18 @@ def get_metadata_model(binary: bool,
     # Totals:
     #   12 int fields
     #   3 variable fields
-    feature_vector_length = (12 +
-                             issue_type_length +
-                             resolution_length +
-                             sum(label_lengths, start=int()))
+    #feature_vector_length = (12 +
+    #                         issue_type_length +
+    #                         resolution_length +
+    #                         sum(label_lengths, start=int()))
     inputs = tf.keras.layers.Input(shape=(feature_vector_length,))
     hidden1 = tf.keras.layers.Dense(64,
                                     activation=keras.activations.relu,
                                     use_bias=True)(inputs)
-    outputs = tf.keras.layers.Dence(1 if binary else 8,
+    outputs = tf.keras.layers.Dense(1 if binary else 8,
                                     activation=keras.activations.sigmoid,
                                     use_bias=True)(hidden1)
-    model = keras.models.Model(inputs=[inputs], output=outputs)
+    model = keras.models.Model(inputs=[inputs], outputs=outputs)
     loss = tf.keras.losses.BinaryCrossentropy() if binary else tf.keras.optimizers.CrossEntropy()
     model.compile(optimizer=tf.keras.optimizers.Adam(),
                   loss=loss,
@@ -165,6 +167,11 @@ def get_metadata_model(binary: bool,
 ##############################################################################
 # Data Preparation
 ##############################################################################
+
+
+def make_feature_vectors(metadata, labels, issue_types, resolution):
+    for a, b, c, d in zip(metadata, labels, issue_types, resolution):
+        yield a + b + c + d
 
 
 def shuffle_raw_data(data, labels):
@@ -234,10 +241,12 @@ def train_and_test_model(model,
                          dataset_val,
                          dataset_test,
                          epochs):
-    for _ in range(5):
+    if epochs <= 0:
+        epochs = 1
+    for _ in range(epochs):
         model.fit(dataset_train,
                   batch_size=64,
-                  epochs=epochs,
+                  epochs=1,
                   validation_data=dataset_val)
 
         results = model.evaluate(dataset_test)
@@ -245,7 +254,36 @@ def train_and_test_model(model,
         correct = results[1] + results[2]
         incorrect = results[3] + results[4]
         print('test accuracy:', correct / (correct + incorrect))
-        return {'accuracy': correct / (correct + incorrect)}
+
+    return {'accuracy': correct / (correct + incorrect)}
+
+
+##############################################################################
+##############################################################################
+# Metadata Model
+##############################################################################
+
+
+def run_metadata_model(binary, features, labels):
+    model = get_metadata_model(binary, len(features[0]))
+    features, labels = shuffle_raw_data(features, labels)
+    train_index = int(len(labels) * 0.8)
+    val_index = train_index + int(len(labels) * 0.1)
+    training_data = features[:train_index]
+    training_labels = labels[:train_index]
+    validation_data = features[train_index:val_index]
+    validation_labels = labels[train_index:val_index]
+    test_data = features[val_index:]
+    test_labels = labels[val_index:]
+
+    def make_dataset(data, labels):
+        dense = tf.constant(data)
+        data_set = tf.data.Dataset.from_tensor_slices((dense, tf.convert_to_tensor(labels))).batch(32)
+        return data_set.shuffle(len(labels), reshuffle_each_iteration=True)
+    training_set = make_dataset(training_data, training_labels)
+    validation_set = make_dataset(validation_data, validation_labels)
+    test_set = make_dataset(test_data, test_labels)
+    train_and_test_model(model, training_set, validation_set, test_set, 50)
 
 
 ##############################################################################
@@ -259,16 +297,27 @@ def main(binary: bool,
          number_of_folds: int,
          test_size: float,
          validation_size: float,
-         epochs: int):
-    word_embedding, labels = load_raw_data()
+         epochs: int,
+         mode: str):
+    word_embedding, metadata, issue_labels, issue_types, resolutions = load_raw_data()
+    features = list(make_feature_vectors(metadata,
+                                         issue_labels,
+                                         issue_types,
+                                         resolutions))
+    labels = load_labels(binary)
+    info = load_metadata()
+
     num_of_issues = len(labels)
     labels = labels[:num_of_issues]
-    data = word_embedding['data']
+    data = list(zip(word_embedding, features))
+
+    if mode == 'metadata':
+        return run_metadata_model(binary, features, labels)
 
     raw_embedding = load_embedding('word_embedding/word2vec.txt')
-    embedding_vectors = get_weight_matrix(raw_embedding, word_embedding[
-        'word_index'])
+    embedding_vectors = get_weight_matrix(raw_embedding, info['embedding']['word_index'])
 
+    raise NotImplementedError('This code must be updated to use the new data model')
     if not use_crossfold_validation:
         model = get_model(binary, word_embedding, embedding_vectors)
         dataset_train, dataset_val, dataset_test = get_single_batch_data(data,
@@ -338,10 +387,17 @@ if __name__ == '__main__':
                         )
     parser.add_argument('--epochs', type=int, default=5,
                         help='Number of epochs used in training')
+    parser.add_argument('--mode', type=str, default='all',
+                        help=('Specify what data to use in the model. '
+                              'Must be "metadata", "text", or "all".'))
     args = parser.parse_args()
+    if args.mode not in ('metadata', 'text', 'all'):
+        print('Invalid mode:', args.mode)
+        sys.exit()
     main(args.binary,
          args.cross,
          args.splits,
          args.test_split_size,
          args.validation_split_size,
-         args.epochs)
+         args.epochs,
+         args.mode)

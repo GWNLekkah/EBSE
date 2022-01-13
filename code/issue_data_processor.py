@@ -85,6 +85,13 @@ def one_hot_encode(word_list, vocab, offset, indices):
         indices[idx + offset] += 1
 
 
+def expand_sparse(sparse, length):
+    vector = [0] * length
+    for index, value in sparse.items():
+        vector[index] = value
+    return vector
+
+
 def one_hot_encoder(issues, vocab, str_keys, list_keys):
     encoded_sparses = []
     for issue in issues:
@@ -108,7 +115,7 @@ def one_hot_encoder(issues, vocab, str_keys, list_keys):
             encoded_sparse.update(indices)
             offset += len(vocab)
         encoded_sparses.append(encoded_sparse)
-    return encoded_sparses
+    return [expand_sparse(sparse, len(vocab)) for sparse in encoded_sparses]
 
 
 ##############################################################################
