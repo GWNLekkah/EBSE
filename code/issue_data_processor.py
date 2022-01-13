@@ -173,7 +173,15 @@ def make_word_embedding(issues):
 
 def transform_issues(issues):
     print('Making word embedding')
+    metadata = {
+        '#_numerical_fields': 12
+    }
     embedding = make_word_embedding(issues)
+    metadata['embedding'] = {
+        'word_index': embedding['word_index'],
+        'vocab_size': embedding['vocab_size'],
+        'sequence_len': embedding['sequence_len']
+    }
     print('Encoding string metadata')
     keys = [
         ('labels', [], ['labels']),
@@ -185,7 +193,7 @@ def transform_issues(issues):
         print('Encoding string metadata:', key)
         vocab, occurrences = make_vocab(list_keys, str_keys, issues)
         # Filtering not needed here
-        #vocab, occurrences = filter_vocab(vocab, occurrences)
+        metadata[f'{key}_length'] = len(vocab)
         result[key] = one_hot_encoder(issues, vocab, str_keys, list_keys)
     labels = result['labels']
     resolution = result['resolution']
@@ -217,14 +225,14 @@ def transform_issues(issues):
                 issue['#_votes'],
                 issue['#_watches'],
                 issue['#_children'],
-                issue['has_parent']
+                int(issue['has_parent'])
             ],
             'labels': labels[index],
             'resolution': resolution[index],
             'issue_type': issue_type[index]
         }
         new_issues.append(new_issue)
-    return new_issues
+    return new_issues, metadata
 
 
 ##############################################################################
@@ -248,10 +256,12 @@ def main(files: list[str]):
         with open(filename) as file:
             issues += json.load(file)
     print('Processing issues')
-    new_issues = transform_issues(issues)
+    new_issues, metadata = transform_issues(issues)
     print('Saving new issues')
     with open('transformed.json', 'w') as file:
         json.dump(new_issues, file)
+    with open('metadata.json', 'w') as file:
+        json.dump(metadata, file)
 
 
 ##############################################################################

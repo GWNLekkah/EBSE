@@ -41,13 +41,16 @@ replacements = {
 ###############################################################################
 
 
+def normalize_word(word: str) -> str:
+    return normalize_sentence(word)[0]
+
+
 def normalize_text(text: str) -> typing.List[str]:
     text = remove_formatting(text)
     sentences = nltk.tokenize.sent_tokenize(text)
     return [
         normalize_sentence(sentence) for sentence in sentences
     ]
-
 
 
 def remove_formatting(text: str) -> str:
