@@ -27,13 +27,24 @@ import keras.activations
 
 def load_raw_data():
     """Load raw data from files"""
-    with open('word_embedding/word_embedding.json') as file:
-        word_embedding = json.load(file)
-    with open('label_reader/architectural_labels.json') as file:
-        labels = json.load(file)
-    with open('label_reader/non_architectural_labels.json') as file:
-        labels.extend(json.load(file))
-    return word_embedding, labels
+    with open('transformed.json') as file:
+        data = json.load(file)
+    return (
+        data['embedding'],
+        data['metadata'],
+        data['labels'],
+        data['issue_type'],
+        data['resolution']
+    )
+
+
+def load_metadata():
+    with open('metadata.json') as file:
+        return json.load(file)
+
+
+def load_labels():
+    pass
 
 
 ##############################################################################
