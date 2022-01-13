@@ -4,6 +4,8 @@
 ##############################################################################
 
 import argparse
+import collections
+import itertools
 import json
 import os
 import random
@@ -18,6 +20,9 @@ import numpy
 from numpy import asarray
 from numpy import zeros
 import keras.activations
+
+
+BATCH_SIZE = 32
 
 
 ##############################################################################
@@ -89,7 +94,19 @@ def get_weight_matrix(embedding, vocab):
 ##############################################################################
 
 
-def get_model(binary: bool, word_embedding, embedding_vectors, info):
+def get_model(input_mode, output_mode, embedding_vectors, input_info):
+    if input_mode == 'text':
+        return get_text_model(output_mode, embedding_vectors, input_info)
+    metadata_length = (input_info['#_numerical_fields'] +
+                       input_info['labels_length'] +
+                       input_info['resolution_length'] +
+                       input_info['issue_type_length'])
+    if input_mode == 'metadata':
+        return get_metadata_model(output_mode, metadata_length)
+    raise NotImplementedError('The combined model has not been implemented yet')
+
+
+def get_text_model(binary: bool, embedding_vectors, info):
     model = tf.keras.models.Sequential()
     model.add(tf.keras.layers.Embedding(info['embedding']['vocab_size'], 100,
                                         weights=[embedding_vectors],
@@ -191,19 +208,47 @@ def get_single_batch_data(data, labels, test_size, validation_size):
 
     dataset = dataset.shuffle(len(labels), reshuffle_each_iteration=True)
 
-    # size_train = int(0.6 * len(labels))
-    # size_val = int(0.5 * (len(labels) - size_train))
-
     size_train = int((1 - test_size - validation_size) * len(labels))
     size_val = int(validation_size * len(labels))
 
-    dataset_train = dataset.take(size_train).shuffle(size_train).batch(64)
-    dataset_val = dataset.skip(size_train).take(size_val).shuffle(
-        size_val).batch(64)
-    dataset_test = dataset.skip(size_train + size_val).shuffle(len(labels) -
-                                                               size_train -
-                                                               size_val).batch(64)
+    dataset_train = dataset.take(size_train).\
+        shuffle(size_train, reshuffle_each_iteration=True).\
+        batch(BATCH_SIZE)
+    dataset_val = dataset.skip(size_train).\
+        take(size_val).\
+        shuffle(size_val, reshuffle_each_iteration=True).\
+        batch(BATCH_SIZE)
+    dataset_test = dataset.\
+        skip(size_train + size_val).\
+        shuffle(len(labels) - size_train - size_val, reshuffle_each_iteration=True).\
+        batch(BATCH_SIZE)
     return dataset_train, dataset_val, dataset_test
+
+
+def cross_validation_data(data, labels, splits):
+    data, labels = shuffle_raw_data(data, labels)
+    data = numpy.array(data)
+    labels = numpy.array(labels)
+    kfold = model_selection.StratifiedKFold(splits)
+    for outer_index, (inner, test) in enumerate(kfold.split(data, labels), start=1):
+        test_dataset = make_dataset(data[test], labels[test])
+        inner_kfold = model_selection.StratifiedKFold(splits - 1)
+        for inner_index, (train, validation) in enumerate(inner_kfold.split(data[inner], labels[inner]), start=1):
+            yield (outer_index,
+                   inner_index,
+                   make_dataset(data[train], labels[train]),
+                   make_dataset(data[validation], labels[validation]),
+                   test_dataset)
+
+
+def make_dataset(data, labels):
+    dense_tensor = tf.constant(data)
+    dataset = tf.data.Dataset.from_tensor_slices(
+        (dense_tensor, tf.convert_to_tensor(labels))
+    )
+    return dataset\
+        .shuffle(len(labels), reshuffle_each_iteration=True)\
+        .batch(BATCH_SIZE)
 
 
 ##############################################################################
@@ -267,22 +312,7 @@ def train_and_test_model(model,
 def run_metadata_model(binary, features, labels):
     model = get_metadata_model(binary, len(features[0]))
     features, labels = shuffle_raw_data(features, labels)
-    train_index = int(len(labels) * 0.8)
-    val_index = train_index + int(len(labels) * 0.1)
-    training_data = features[:train_index]
-    training_labels = labels[:train_index]
-    validation_data = features[train_index:val_index]
-    validation_labels = labels[train_index:val_index]
-    test_data = features[val_index:]
-    test_labels = labels[val_index:]
-
-    def make_dataset(data, labels):
-        dense = tf.constant(data)
-        data_set = tf.data.Dataset.from_tensor_slices((dense, tf.convert_to_tensor(labels))).batch(32)
-        return data_set.shuffle(len(labels), reshuffle_each_iteration=True)
-    training_set = make_dataset(training_data, training_labels)
-    validation_set = make_dataset(validation_data, validation_labels)
-    test_set = make_dataset(test_data, test_labels)
+    training_set, validation_set, test_set = get_single_batch_data(features, labels, 0.8, 0.1)
     train_and_test_model(model, training_set, validation_set, test_set, 50)
 
 
@@ -307,50 +337,41 @@ def main(binary: bool,
     labels = load_labels(binary)
     info = load_metadata()
 
+    if mode == 'metadata':
+        data = features
+    elif mode == 'text':
+        data = word_embedding
+    else:
+        raise NotImplementedError('Mixed mode has not been implemented yet')
+
     num_of_issues = len(labels)
     labels = labels[:num_of_issues]
-    data = list(zip(word_embedding, features))
-
-    if mode == 'metadata':
-        return run_metadata_model(binary, features, labels)
 
     raw_embedding = load_embedding('word_embedding/word2vec.txt')
     embedding_vectors = get_weight_matrix(raw_embedding, info['embedding']['word_index'])
 
     if not use_crossfold_validation:
-        model = get_model(binary, word_embedding, embedding_vectors, info)
-        dataset_train, dataset_val, dataset_test = get_single_batch_data(word_embedding,
-                                                                         labels,
-                                                                         test_size,
-                                                                         validation_size)
+        model = get_model(mode, binary, embedding_vectors, info)
+        if mode == 'all':
+            raise NotImplementedError
+        else:
+            dataset_train, dataset_val, dataset_test = get_single_batch_data(data,
+                                                                             labels,
+                                                                             test_size,
+                                                                             validation_size)
         train_and_test_model(model, dataset_train, dataset_val, dataset_test, epochs)
 
     else:
         # https://medium.com/the-owl/k-fold-cross-validation-in-keras-3ec4a3a00538
-        word_embedding, labels = shuffle_raw_data(word_embedding, labels)
-        kfold = model_selection.StratifiedKFold(number_of_folds, shuffle=True)
-        test_data_length = int(test_size * len(labels))
-        test_labels = labels[:test_data_length]
-        test_features = data[:test_data_length]
-        reduced_labels = numpy.array(labels[test_data_length:])
-        reduced_features = numpy.array(word_embedding[test_data_length:])
-        dense_tensor_test = tf.constant(test_features)
-        dataset_test = tf.data.Dataset.from_tensor_slices(
-            (dense_tensor_test, tf.convert_to_tensor(test_labels))
-        ).shuffle(len(test_labels), reshuffle_each_iteration=True).batch(64)
-        i = 1
+        if mode == 'all':
+            raise NotImplementedError
+        else:
+            iterator = cross_validation_data(data, labels, number_of_folds)
         results = []
-        for train_index, test_index in kfold.split(reduced_features, reduced_labels):
-            print('Fold:', i)
-            dense_tensor_train = tf.constant(reduced_features[train_index])
-            dataset_train = tf.data.Dataset.from_tensor_slices(
-                (dense_tensor_train, tf.convert_to_tensor(reduced_labels[train_index]))
-            ).shuffle(len(reduced_labels[train_index]), reshuffle_each_iteration=True).batch(64)
-            dense_tensor_val = tf.constant(reduced_features[test_index])
-            dataset_val = tf.data.Dataset.from_tensor_slices(
-                (dense_tensor_val, tf.convert_to_tensor(reduced_labels[test_index]))
-            ).shuffle(len(reduced_labels[test_index]), reshuffle_each_iteration=True).batch(64)
-            model = get_model(binary, word_embedding, embedding_vectors, info)
+        for iteration in iterator:
+            test_fold, fold, dataset_train, dataset_val, dataset_test = iteration
+            print(f'Test Set: {test_fold} | Fold: {fold}')
+            model = get_model(mode, binary, embedding_vectors, info)
 
             metrics = train_and_test_model(model,
                                            dataset_train,
@@ -358,7 +379,6 @@ def main(binary: bool,
                                            dataset_test,
                                            epochs)
             results.append(metrics['accuracy'])
-            i += 1
 
         print(f'Average Accuracy: {statistics.mean(results)} '
               f'(standard deviation: {statistics.stdev(results)})')
