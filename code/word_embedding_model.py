@@ -89,11 +89,11 @@ def get_weight_matrix(embedding, vocab):
 ##############################################################################
 
 
-def get_model(binary: bool, word_embedding, embedding_vectors):
+def get_model(binary: bool, word_embedding, embedding_vectors, info):
     model = tf.keras.models.Sequential()
-    model.add(tf.keras.layers.Embedding(word_embedding['vocab_size'], 100,
+    model.add(tf.keras.layers.Embedding(info['embedding']['vocab_size'], 100,
                                         weights=[embedding_vectors],
-                                        input_length=word_embedding['sequence_len']))
+                                        input_length=info['embedding']['sequence_len']))
     model.add(tf.keras.layers.Conv1D(filters=32, kernel_size=8,
                                      activation='relu'))
     model.add(tf.keras.layers.MaxPooling1D(pool_size=2))
@@ -317,10 +317,9 @@ def main(binary: bool,
     raw_embedding = load_embedding('word_embedding/word2vec.txt')
     embedding_vectors = get_weight_matrix(raw_embedding, info['embedding']['word_index'])
 
-    raise NotImplementedError('This code must be updated to use the new data model')
     if not use_crossfold_validation:
-        model = get_model(binary, word_embedding, embedding_vectors)
-        dataset_train, dataset_val, dataset_test = get_single_batch_data(data,
+        model = get_model(binary, word_embedding, embedding_vectors, info)
+        dataset_train, dataset_val, dataset_test = get_single_batch_data(word_embedding,
                                                                          labels,
                                                                          test_size,
                                                                          validation_size)
@@ -328,13 +327,13 @@ def main(binary: bool,
 
     else:
         # https://medium.com/the-owl/k-fold-cross-validation-in-keras-3ec4a3a00538
-        data, labels = shuffle_raw_data(data, labels)
+        word_embedding, labels = shuffle_raw_data(word_embedding, labels)
         kfold = model_selection.StratifiedKFold(number_of_folds, shuffle=True)
         test_data_length = int(test_size * len(labels))
         test_labels = labels[:test_data_length]
         test_features = data[:test_data_length]
         reduced_labels = numpy.array(labels[test_data_length:])
-        reduced_features = numpy.array(data[test_data_length:])
+        reduced_features = numpy.array(word_embedding[test_data_length:])
         dense_tensor_test = tf.constant(test_features)
         dataset_test = tf.data.Dataset.from_tensor_slices(
             (dense_tensor_test, tf.convert_to_tensor(test_labels))
@@ -351,7 +350,7 @@ def main(binary: bool,
             dataset_val = tf.data.Dataset.from_tensor_slices(
                 (dense_tensor_val, tf.convert_to_tensor(reduced_labels[test_index]))
             ).shuffle(len(reduced_labels[test_index]), reshuffle_each_iteration=True).batch(64)
-            model = get_model(binary, word_embedding, embedding_vectors)
+            model = get_model(binary, word_embedding, embedding_vectors, info)
 
             metrics = train_and_test_model(model,
                                            dataset_train,
