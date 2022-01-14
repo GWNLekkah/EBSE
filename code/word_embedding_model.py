@@ -37,7 +37,7 @@ def load_raw_data():
     with open('transformed.json') as file:
         issues = json.load(file)
     return (
-        [data['embedded_text'] for data in issues],
+        [data['text'] for data in issues],
         [data['metadata'] for data in issues],
         [data['labels'] for data in issues],
         [data['issue_type'] for data in issues],
@@ -50,12 +50,15 @@ def load_metadata():
         return json.load(file)
 
 
-def load_labels(binary):
+def load_labels(output_mode):
     with open('labels.json') as file:
         labels = json.load(file)
-    if binary:
+    if output_mode == 'binary':
         return labels['binary']
-    return labels['groups_8']
+    elif output_mode == 'eight':
+        return labels['groups_8']
+    elif output_mode == 'four':
+        return labels['groups_4']
 
 
 ##############################################################################
@@ -107,20 +110,30 @@ def get_model(input_mode, output_mode, embedding_vectors, input_info):
     raise NotImplementedError('The combined model has not been implemented yet')
 
 
-def get_text_model(binary: bool, embedding_vectors, info):
+def get_text_model(output_mode: str, embedding_vectors, info):
     model = tf.keras.models.Sequential()
-    model.add(tf.keras.layers.Embedding(info['embedding']['vocab_size'], 100,
-                                        weights=[embedding_vectors],
-                                        input_length=info['embedding']['sequence_len']))
-    model.add(tf.keras.layers.Conv1D(filters=32, kernel_size=8,
-                                     activation='relu'))
-    model.add(tf.keras.layers.MaxPooling1D(pool_size=2))
-    model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(10, activation='relu'))
-    if binary:
-        model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
+    if embedding_vectors is not None:
+        model.add(tf.keras.layers.Embedding(info['embedding']['vocab_size'], 100,
+                                            weights=[embedding_vectors],
+                                            input_length=info['embedding']['sequence_len']))
+        model.add(tf.keras.layers.Conv1D(filters=32, kernel_size=8,
+                                         activation='relu'))
+        model.add(tf.keras.layers.MaxPooling1D(pool_size=2))
+        model.add(tf.keras.layers.Flatten())
     else:
+        size = tuple(info['matrix']['size'])
+        model.add(tf.keras.layers.Conv2D(32, (5, 3), activation='relu', input_shape=size + (1,)))
+        model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+        #model.add(tf.keras.layers.Conv2D(32, (5, 3), activation='relu'))
+        #model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+        model.add(tf.keras.layers.Flatten())
+    model.add(tf.keras.layers.Dense(10, activation='relu'))
+    if output_mode == 'binary':
+        model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
+    elif output_mode == 'eight':
         model.add(tf.keras.layers.Dense(8, activation='sigmoid'))
+    elif output_mode == 'four':
+        raise NotImplementedError
 
     # Other metrics
     # tf.keras.metrics.Accuracy()
@@ -138,7 +151,7 @@ def get_text_model(binary: bool, embedding_vectors, info):
     return model
 
 
-def get_metadata_model(binary: bool, feature_vector_length: int):
+def get_metadata_model(output_mode: str, feature_vector_length: int):
     # Inputs for the model:
     # summary length            int
     # description length        int
@@ -167,11 +180,20 @@ def get_metadata_model(binary: bool, feature_vector_length: int):
     hidden1 = tf.keras.layers.Dense(64,
                                     activation=keras.activations.relu,
                                     use_bias=True)(inputs)
-    outputs = tf.keras.layers.Dense(1 if binary else 8,
+    output_size = 1
+    loss = tf.keras.losses.BinaryCrossentropy
+    if output_mode == 'binary':
+        loss = tf.keras.losses.BinaryCrossentropy
+        output_size = 1
+    elif output_mode == 'eight':
+        loss = tf.keras.optimizers.CrossEntropy()
+        output_size = 8
+    elif output_mode == 'four':
+        raise NotImplementedError
+    outputs = tf.keras.layers.Dense(output_size,
                                     activation=keras.activations.sigmoid,
                                     use_bias=True)(hidden1)
     model = keras.models.Model(inputs=[inputs], outputs=outputs)
-    loss = tf.keras.losses.BinaryCrossentropy() if binary else tf.keras.optimizers.CrossEntropy()
     model.compile(optimizer=tf.keras.optimizers.Adam(),
                   loss=loss,
                   metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
@@ -339,7 +361,7 @@ def train_and_test_model(model,
             incorrect = results[3] + results[4]
             acc = correct / (correct + incorrect)
             final_results['accuracy'] = acc
-            print(f'Test accuracy (epoch):', acc)
+            print(f'Test accuracy ({epoch}):', acc)
 
     train_x, train_y = dataset_train
     test_x, test_y = dataset_test
@@ -359,7 +381,7 @@ def train_and_test_model(model,
 ##############################################################################
 
 
-def main(binary: bool,
+def main(output_mode: str,
          use_crossfold_validation: bool,
          number_of_folds: int,
          test_size: float,
@@ -371,7 +393,7 @@ def main(binary: bool,
                                          issue_labels,
                                          issue_types,
                                          resolutions))
-    labels = load_labels(binary)
+    labels = load_labels(output_mode)
     info = load_metadata()
 
     if mode == 'metadata':
@@ -384,8 +406,14 @@ def main(binary: bool,
     num_of_issues = len(labels)
     labels = labels[:num_of_issues]
 
-    raw_embedding = load_embedding('word_embedding/word2vec.txt')
-    embedding_vectors = get_weight_matrix(raw_embedding, info['embedding']['word_index'])
+    if info['uses_embedding']:
+        raw_embedding = load_embedding('word_embedding/word2vec.txt')
+        embedding_vectors = get_weight_matrix(raw_embedding, info['embedding']['word_index'])
+    elif info['uses_matrix']:
+        raw_embedding = None
+        embedding_vectors = None
+    else:
+        raise NotImplementedError
 
     if not use_crossfold_validation:
         if mode == 'all':
@@ -397,7 +425,7 @@ def main(binary: bool,
                                                                              labels,
                                                                              test_size,
                                                                              validation_size)
-        model = get_model(mode, binary, embedding_vectors, info)
+        model = get_model(mode, output_mode, embedding_vectors, info)
         train_and_test_model(model, dataset_train, dataset_val, dataset_test, epochs)
 
     else:
@@ -415,7 +443,7 @@ def main(binary: bool,
         for iteration in iterator:
             test_fold, fold, dataset_train, dataset_val, dataset_test = iteration
             print(f'Test Set: {test_fold} | Fold: {fold}')
-            model = get_model(mode, binary, embedding_vectors, info)
+            model = get_model(mode, output_mode, embedding_vectors, info)
 
             metrics = train_and_test_model(model,
                                            dataset_train,
@@ -436,8 +464,10 @@ def main(binary: bool,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--binary', action='store_true', default=False,
-                        help='Enable binary classification mode.')
+    parser.add_argument('--output', type=str, default='binary',
+                        help=('Output mode for the neural network. '
+                              'Must be one of "binary", "eight", or "four"')
+                        )
     parser.add_argument('--cross', action='store_true', default=False,
                         help='Enable K-fold cross-validation.')
     parser.add_argument('--splits', type=int, default=10,
@@ -457,7 +487,10 @@ if __name__ == '__main__':
     if args.mode not in ('metadata', 'text', 'all'):
         print('Invalid mode:', args.mode)
         sys.exit()
-    main(args.binary,
+    if args.output not in ('binary', 'eight', 'four'):
+        print('Invalid output mode:', args.output)
+        sys.exit()
+    main(args.output,
          args.cross,
          args.splits,
          args.test_split_size,

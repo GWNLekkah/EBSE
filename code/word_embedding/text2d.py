@@ -49,7 +49,7 @@ def main():
             bar()
 
     with open('text2d.json', 'w+') as file:
-        json.dump(issue_matrices, file, indent=4)
+        json.dump(issue_matrices, file)
 
 
 if __name__ == '__main__':

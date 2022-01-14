@@ -9,6 +9,7 @@ import contextlib
 import json
 import os
 import subprocess
+import sys
 
 from text_cleaner import normalize_text
 
@@ -172,23 +173,44 @@ def make_word_embedding(issues):
         return json.load(file)
 
 
+def make_word_matrix(issues):
+    #with change_wd('./word_embedding'):
+    #    print('Waiting for subprocess to finish')
+    #    subprocess.run('py -3.9 text2d.py')
+    #    print('Subprocess done')
+    with open('./word_embedding/text2d.json') as file:
+        return json.load(file)
+
+
 ##############################################################################
 ##############################################################################
 # Single-file transformation functions
 ##############################################################################
 
 
-def transform_issues(issues):
+def transform_issues(issues, text_mode):
     print('Making word embedding')
     metadata = {
-        '#_numerical_fields': 12
+        '#_numerical_fields': 12,
+        'uses_embedding': text_mode == 'embedding',
+        'uses_matrix': text_mode == 'matrix'
     }
-    embedding = make_word_embedding(issues)
-    metadata['embedding'] = {
-        'word_index': embedding['word_index'],
-        'vocab_size': embedding['vocab_size'],
-        'sequence_len': embedding['sequence_len']
-    }
+    if text_mode == 'embedding':
+        embedding = make_word_embedding(issues)
+        metadata['embedding'] = {
+            'word_index': embedding['word_index'],
+            'vocab_size': embedding['vocab_size'],
+            'sequence_len': embedding['sequence_len']
+        }
+        word_data = embedding['data']
+    else:
+        word_data = make_word_matrix(issues)
+        metadata['matrix'] = {
+            'size': [
+                len(word_data[0]),
+                len(word_data[0][0])
+            ]
+        }
     print('Encoding string metadata')
     keys = [
         ('labels', [], ['labels']),
@@ -206,20 +228,20 @@ def transform_issues(issues):
     resolution = result['resolution']
     issue_type = result['issue_type']
     new_issues = []
-    print(len(embedding['data']))
-    print(len(labels))
-    print(len(resolution))
-    print(len(issue_type))
-    print(len(issues))
-    assert len(embedding['data']) == len(labels)
-    assert len(embedding['data']) == len(resolution)
-    assert len(embedding['data']) == len(issue_type)
-    assert len(embedding['data']) == len(issues)
+    #print(len(embedding['data']))
+    #print(len(labels))
+    #print(len(resolution))
+    #print(len(issue_type))
+    #print(len(issues))
+    #assert len(embedding['data']) == len(labels)
+    #assert len(embedding['data']) == len(resolution)
+    #assert len(embedding['data']) == len(issue_type)
+    #assert len(embedding['data']) == len(issues)
     print('Building new issues')
     for index in range(0, len(issues)):
         issue = issues[index]
         new_issue = {
-            'embedded_text': embedding['data'][index],
+            'text': word_data[index],
             'metadata': [
                 issue['summary_length'],
                 issue['description_length'],
@@ -236,7 +258,7 @@ def transform_issues(issues):
             ],
             'labels': labels[index],
             'resolution': resolution[index],
-            'issue_type': issue_type[index]
+            'issue_type': issue_type[index],
         }
         new_issues.append(new_issue)
     return new_issues, metadata
@@ -248,7 +270,7 @@ def transform_issues(issues):
 ##############################################################################
 
 
-def main(files: list[str]):
+def main(files: list[str], text_mode):
     # Preprocessing steps:
     #   1) Extract vocabulary
     #   2) Filter vocabulary
@@ -263,7 +285,7 @@ def main(files: list[str]):
         with open(filename) as file:
             issues += json.load(file)
     print('Processing issues')
-    new_issues, metadata = transform_issues(issues)
+    new_issues, metadata = transform_issues(issues, text_mode)
     print('Saving new issues')
     with open('transformed.json', 'w') as file:
         json.dump(new_issues, file)
@@ -281,7 +303,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('files', type=str, nargs='+',
                         help='Files of preprocess')
+    parser.add_argument('--text-mode', type=str, default='embedding',
+                        help=('Method in which text should be processed. '
+                              'Should be "embedding" or "matrix".')
+                        )
     args = parser.parse_args()
-    main(args.files)
+    if args.text_mode not in ('embedding', 'matrix'):
+        print('Invalid --text-mode:', args.text_mode)
+        sys.exit()
+    main(args.files, args.text_mode)
 
 
