@@ -107,10 +107,10 @@ def get_model(input_mode, output_mode, embedding_vectors, input_info):
                        input_info['issue_type_length'])
     if input_mode == 'metadata':
         return get_metadata_model(output_mode, metadata_length)
-    raise NotImplementedError('The combined model has not been implemented yet')
+    return get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info)
 
 
-def get_text_model(output_mode: str, embedding_vectors, info):
+def get_text_model(output_mode: str, embedding_vectors, info, do_compile=True):
     model = tf.keras.models.Sequential()
     if embedding_vectors is not None:
         model.add(tf.keras.layers.Embedding(info['embedding']['vocab_size'], 100,
@@ -141,6 +141,8 @@ def get_text_model(output_mode: str, embedding_vectors, info):
     # tf.keras.metrics.CategoricalAccuracy()
     # tf.metrics.Precision(thresholds=0.5)
     # tf.keras.metrics.Recall(thresholds=0.5)
+    if not do_compile:
+        return model
     model.compile(optimizer=tf.keras.optimizers.Adam(),
                   loss=tf.keras.losses.BinaryCrossentropy(),
                   metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
@@ -151,7 +153,7 @@ def get_text_model(output_mode: str, embedding_vectors, info):
     return model
 
 
-def get_metadata_model(output_mode: str, feature_vector_length: int):
+def get_metadata_model(output_mode: str, feature_vector_length: int, do_compile=True):
     # Inputs for the model:
     # summary length            int
     # description length        int
@@ -194,6 +196,8 @@ def get_metadata_model(output_mode: str, feature_vector_length: int):
                                     activation=keras.activations.sigmoid,
                                     use_bias=True)(hidden1)
     model = keras.models.Model(inputs=[inputs], outputs=outputs)
+    if not do_compile:
+        return model
     model.compile(optimizer=tf.keras.optimizers.Adam(),
                   loss=loss,
                   metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
@@ -201,6 +205,58 @@ def get_metadata_model(output_mode: str, feature_vector_length: int):
                            tf.keras.metrics.FalsePositives(thresholds=0.5),
                            tf.keras.metrics.FalseNegatives(thresholds=0.5)])
     return model
+
+
+def get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info):
+    # 1: text input
+    width = input_info['matrix']['size'][1]
+    height = input_info['matrix']['size'][0]
+    print(width)
+    text_inputs = tf.keras.layers.Input(shape=tuple(input_info['matrix']['size']) + (1,))
+    small_convolution = tf.keras.layers.Conv2D(3, (1, width), activation='relu')(text_inputs)
+    medium_convolution = tf.keras.layers.Conv2D(3, (2, width), activation='relu')(text_inputs)
+    large_convolution = tf.keras.layers.Conv2D(3, (3, width), activation='relu')(text_inputs)
+
+    small_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height, width))(small_convolution)
+    medium_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height - 1, width))(medium_convolution)
+    large_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height - 2, width))(large_convolution)
+
+    concatenated = tf.keras.layers.concatenate(small_pooling,
+                                               medium_pooling,
+                                               large_pooling)
+    flattened = tf.keras.layers.Flatten(concatenated)
+
+    # 2: metadata input
+    data_inputs = tf.keras.layers.Input(shape=(metadata_length,))
+    hidden = tf.keras.layers.Dense(8)(data_inputs)
+
+    # 3: merged
+    merged = tf.keras.layers.concatenate(flattened, hidden)
+
+    # 4: output
+    output_size = 1
+    loss = tf.keras.losses.BinaryCrossentropy
+    if output_mode == 'binary':
+        loss = tf.keras.losses.BinaryCrossentropy
+        output_size = 1
+    elif output_mode == 'eight':
+        loss = tf.keras.optimizers.CrossEntropy()
+        output_size = 8
+    elif output_mode == 'four':
+        raise NotImplementedError
+    outputs = tf.keras.layers.Dense(output_size,
+                                    activation=keras.activations.sigmoid,
+                                    use_bias=True)(merged)
+    model = keras.models.Model(inputs=[text_inputs, data_inputs], outputs=outputs)
+    model.compile(optimizer=tf.keras.optimizers.Adam(),
+                  loss=loss,
+                  metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
+                           tf.keras.metrics.TrueNegatives(thresholds=0.5),
+                           tf.keras.metrics.FalsePositives(thresholds=0.5),
+                           tf.keras.metrics.FalseNegatives(thresholds=0.5)])
+    return model
+
+
 
 
 ##############################################################################
