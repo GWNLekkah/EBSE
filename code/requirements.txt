@@ -10,3 +10,4 @@ contractions
 word2number
 gensim
 alive_progress
+matplotlib
