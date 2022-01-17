@@ -111,27 +111,39 @@ def get_model(input_mode, output_mode, embedding_vectors, input_info):
 
 
 def get_text_model(output_mode: str, embedding_vectors, info, do_compile=True):
-    model = tf.keras.models.Sequential()
     if embedding_vectors is not None:
-        model.add(tf.keras.layers.Embedding(info['embedding']['vocab_size'], 100,
+        text_inputs = tf.keras.layers.Embedding(info['embedding']['vocab_size'], 100,
                                             weights=[embedding_vectors],
-                                            input_length=info['embedding']['sequence_len']))
-        model.add(tf.keras.layers.Conv1D(filters=32, kernel_size=8,
-                                         activation='relu'))
-        model.add(tf.keras.layers.MaxPooling1D(pool_size=2))
-        model.add(tf.keras.layers.Flatten())
+                                            input_length=info['embedding']['sequence_len'])
+        hidden = tf.keras.layers.Conv1D(filters=32, kernel_size=8,
+                                         activation='relu')(text_inputs)
+        hidden = tf.keras.layers.MaxPooling1D(pool_size=2)(hidden)
+        model = tf.keras.layers.Flatten()(hidden)
     else:
-        size = tuple(info['matrix']['size'])
-        model.add(tf.keras.layers.Conv2D(32, (5, 3), activation='relu', input_shape=size + (1,)))
-        model.add(tf.keras.layers.MaxPooling2D((2, 2)))
-        #model.add(tf.keras.layers.Conv2D(32, (5, 3), activation='relu'))
-        #model.add(tf.keras.layers.MaxPooling2D((2, 2)))
-        model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(10, activation='relu'))
+        # 1: text input
+        width = info['matrix']['size'][1]
+        height = info['matrix']['size'][0]
+        print(width)
+        text_inputs = tf.keras.layers.Input(shape=tuple(info['matrix']['size']) + (1,))
+        small_convolution = tf.keras.layers.Conv2D(32, (1, width), activation='relu')(text_inputs)
+        medium_convolution = tf.keras.layers.Conv2D(32, (2, width), activation='relu')(
+            text_inputs)
+        large_convolution = tf.keras.layers.Conv2D(32, (3, width), activation='relu')(
+            text_inputs)
+
+        small_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height, 1))(small_convolution)
+        medium_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height - 1, 1))(medium_convolution)
+        large_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height - 2, 1))(large_convolution)
+
+        concatenated = tf.keras.layers.concatenate([small_pooling,
+                                                    medium_pooling,
+                                                    large_pooling])
+        model = tf.keras.layers.Flatten()(concatenated)
+    model = tf.keras.layers.Dense(10, activation='relu')(model)
     if output_mode == 'binary':
-        model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
+        model = tf.keras.layers.Dense(1, activation='sigmoid')(model)
     elif output_mode == 'eight':
-        model.add(tf.keras.layers.Dense(8, activation='sigmoid'))
+        model = tf.keras.layers.Dense(8, activation='sigmoid')(model)
     elif output_mode == 'four':
         raise NotImplementedError
 
@@ -143,6 +155,9 @@ def get_text_model(output_mode: str, embedding_vectors, info, do_compile=True):
     # tf.keras.metrics.Recall(thresholds=0.5)
     if not do_compile:
         return model
+
+    model = tf.keras.Model(inputs=text_inputs, outputs=model)
+
     model.compile(optimizer=tf.keras.optimizers.Adam(),
                   loss=tf.keras.losses.BinaryCrossentropy(),
                   metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
@@ -213,31 +228,31 @@ def get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info)
     height = input_info['matrix']['size'][0]
     print(width)
     text_inputs = tf.keras.layers.Input(shape=tuple(input_info['matrix']['size']) + (1,))
-    small_convolution = tf.keras.layers.Conv2D(3, (1, width), activation='relu')(text_inputs)
-    medium_convolution = tf.keras.layers.Conv2D(3, (2, width), activation='relu')(text_inputs)
-    large_convolution = tf.keras.layers.Conv2D(3, (3, width), activation='relu')(text_inputs)
+    small_convolution = tf.keras.layers.Conv2D(32, (1, width), activation='relu')(text_inputs)
+    medium_convolution = tf.keras.layers.Conv2D(32, (2, width), activation='relu')(text_inputs)
+    large_convolution = tf.keras.layers.Conv2D(32, (3, width), activation='relu')(text_inputs)
 
-    small_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height, width))(small_convolution)
-    medium_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height - 1, width))(medium_convolution)
-    large_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height - 2, width))(large_convolution)
+    small_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height, 1))(small_convolution)
+    medium_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height - 1, 1))(medium_convolution)
+    large_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height - 2, 1))(large_convolution)
 
-    concatenated = tf.keras.layers.concatenate(small_pooling,
+    concatenated = tf.keras.layers.concatenate([small_pooling,
                                                medium_pooling,
-                                               large_pooling)
-    flattened = tf.keras.layers.Flatten(concatenated)
+                                               large_pooling])
+    flattened = tf.keras.layers.Flatten()(concatenated)
 
     # 2: metadata input
     data_inputs = tf.keras.layers.Input(shape=(metadata_length,))
     hidden = tf.keras.layers.Dense(8)(data_inputs)
 
     # 3: merged
-    merged = tf.keras.layers.concatenate(flattened, hidden)
+    merged = tf.keras.layers.concatenate([flattened, hidden])
 
     # 4: output
     output_size = 1
-    loss = tf.keras.losses.BinaryCrossentropy
+    loss = tf.keras.losses.BinaryCrossentropy()
     if output_mode == 'binary':
-        loss = tf.keras.losses.BinaryCrossentropy
+        loss = tf.keras.losses.BinaryCrossentropy()
         output_size = 1
     elif output_mode == 'eight':
         loss = tf.keras.optimizers.CrossEntropy()
