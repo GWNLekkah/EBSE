@@ -387,6 +387,43 @@ def cross_validation_data_mixed(word_embedding, features, labels, splits):
                    validation_dataset,
                    test_dataset)
 
+
+def pure_cross_validation_data(data, labels, splits):
+    data, labels = shuffle_raw_data(data, labels)
+    data = numpy.array(data)
+    labels = numpy.array(labels)
+    kfold = model_selection.KFold(splits)
+    for index, (train, test) in enumerate(kfold.split(data, labels), start=1):
+        yield (1, index,
+               (data[train], labels[train]),
+               (data[test], labels[test]),
+               (data[test], labels[test]))
+
+
+def pure_cross_validation_data_mixed(word_embedding, features, labels, splits):
+    word_embedding, features, labels = shuffle_raw_data(word_embedding, features, labels)
+    word_embedding = numpy.array(word_embedding)
+    features = numpy.array(features)
+    labels = numpy.array(labels)
+    kfold = model_selection.KFold(splits)
+    for index, (train, validation) in enumerate(kfold.split(word_embedding, labels), start=1):
+        train_dataset = (
+            [word_embedding[train], features[train]],
+            labels[train]
+        )
+        validation_dataset = (
+            [word_embedding[validation], features[validation]],
+            labels[validation]
+        )
+        test_dataset = (
+            [word_embedding[validation], features[validation]],
+            labels[validation]
+        )
+        yield (1, index,
+               train_dataset,
+               validation_dataset,
+               test_dataset)
+
 ##############################################################################
 ##############################################################################
 # Metric Computation
@@ -460,7 +497,7 @@ def train_and_test_model(model,
 
 
 def main(output_mode: str,
-         use_crossfold_validation: bool,
+         crossfold_validation: str,
          number_of_folds: int,
          test_size: float,
          validation_size: float,
@@ -493,7 +530,7 @@ def main(output_mode: str,
     else:
         raise NotImplementedError
 
-    if not use_crossfold_validation:
+    if crossfold_validation == 'none':
         if mode == 'all':
             dataset_train, dataset_val, dataset_test = get_single_batch_data_mixed(
                 word_embedding, features, labels, test_size, validation_size
@@ -508,15 +545,25 @@ def main(output_mode: str,
 
     else:
         # https://medium.com/the-owl/k-fold-cross-validation-in-keras-3ec4a3a00538
-        if mode == 'all':
-            iterator = cross_validation_data_mixed(word_embedding,
-                                                   features,
-                                                   labels,
-                                                   number_of_folds)
+        if crossfold_validation == 'test':
+            if mode == 'all':
+                iterator = cross_validation_data_mixed(word_embedding,
+                                                       features,
+                                                       labels,
+                                                       number_of_folds)
+            else:
+                iterator = cross_validation_data(data,
+                                                 labels,
+                                                 number_of_folds)
         else:
-            iterator = cross_validation_data(data,
-                                             labels,
-                                             number_of_folds)
+            if mode == 'all':
+                iterator = pure_cross_validation_data_mixed(word_embedding,
+                                                            features,
+                                                            labels,
+                                                            number_of_folds)
+            else:
+                iterator = pure_cross_validation_data(data, labels, number_of_folds)
+
         results = []
         for iteration in iterator:
             test_fold, fold, dataset_train, dataset_val, dataset_test = iteration
@@ -541,7 +588,6 @@ def main(output_mode: str,
             print('    * Median:', statistics.median(stat_data))
 
 
-
 ##############################################################################
 ##############################################################################
 # Program Entry Point
@@ -554,8 +600,9 @@ if __name__ == '__main__':
                         help=('Output mode for the neural network. '
                               'Must be one of "binary", "eight", or "four"')
                         )
-    parser.add_argument('--cross', action='store_true', default=False,
-                        help='Enable K-fold cross-validation.')
+    parser.add_argument('--cross', type=str, default='none',
+                        help=('Configure cross fold validation. '
+                              'Must be "none", "normal", or "test"'))
     parser.add_argument('--splits', type=int, default=10,
                         help='Number of splits (K) to use for K-fold cross-validation.')
     parser.add_argument('--test-split-size', type=float, default=0.1,
@@ -575,6 +622,9 @@ if __name__ == '__main__':
         sys.exit()
     if args.output not in ('binary', 'eight', 'four'):
         print('Invalid output mode:', args.output)
+        sys.exit()
+    if args.cross not in ('none', 'normal', 'test'):
+        print('Invalid cross mode:', args.cross)
         sys.exit()
     main(args.output,
          args.cross,

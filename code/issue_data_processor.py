@@ -174,10 +174,10 @@ def make_word_embedding(issues):
 
 
 def make_word_matrix(issues):
-    #with change_wd('./word_embedding'):
-    #    print('Waiting for subprocess to finish')
-    #    subprocess.run('py -3.9 text2d.py')
-    #    print('Subprocess done')
+    with change_wd('./word_embedding'):
+        print('Waiting for subprocess to finish')
+        subprocess.run('py -3.9 text2d.py')
+        print('Subprocess done')
     with open('./word_embedding/text2d.json') as file:
         return json.load(file)
 
