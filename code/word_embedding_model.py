@@ -428,11 +428,18 @@ def train_and_test_model(model,
     class MetricLogger(keras.callbacks.Callback):
         def on_epoch_end(self, epoch, logs=None):
             results = model.evaluate(x=test_x, y=test_y)
-            correct = results[1] + results[2]
-            incorrect = results[3] + results[4]
-            acc = correct / (correct + incorrect)
-            final_results['accuracy'] = acc
-            print(f'Test accuracy ({epoch}):', acc)
+            tp, tn, fp, fn = results[1], results[2], results[3], results[4]
+            # correct = results[1] + results[2]
+            # incorrect = results[3] + results[4]
+            # acc = correct / (correct + incorrect)
+            final_results['accuracy'] = accuracy(tp, tn, fp, fn)
+            final_results['precision'] = precision(tp, tn, fp, fn)
+            final_results['recall'] = recall(tp, tn, fp, fn)
+            final_results['f-score'] = f_score(tp, tn, fp, fn)
+            print(f'Test accuracy ({epoch}):', final_results['accuracy'])
+            print(f'Test Precision ({epoch}):', final_results['precision'])
+            print(f'Test Recall ({epoch}):', final_results['recall'])
+            print(f'Test F-score ({epoch}):', final_results['f-score'])
 
     train_x, train_y = dataset_train
     test_x, test_y = dataset_test
@@ -521,10 +528,18 @@ def main(output_mode: str,
                                            dataset_val,
                                            dataset_test,
                                            epochs)
-            results.append(metrics['accuracy'])
+            results.append(metrics)
 
-        print(f'Average Accuracy: {statistics.mean(results)} '
-              f'(standard deviation: {statistics.stdev(results)})')
+        for key in ['accuracy', 'precision', 'recall', 'f-score']:
+            stat_data = [metrics[key] for metrics in results]
+            print('-' * 72)
+            print(key.capitalize())
+            print('    * Mean:', statistics.mean(stat_data))
+            print('    * Geometric Mean:', statistics.geometric_mean(stat_data))
+            #print('    * Harmonic Mean:', statistics.geometric_mean(stat_data))
+            print('    * Standard Deviation:', statistics.stdev(stat_data))
+            print('    * Median:', statistics.median(stat_data))
+
 
 
 ##############################################################################
