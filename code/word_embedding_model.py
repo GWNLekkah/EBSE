@@ -497,13 +497,14 @@ def train_and_test_model(model,
     class MetricLogger(keras.callbacks.Callback):
         def on_epoch_end(self, epoch, logs=None):
             results = model.evaluate(x=test_x, y=test_y)
-            tp, tn, fp, fn = results[1], results[2], results[3], results[4]
+            print(results)
+            loss, tp, tn, fp, fn, accuracy_, precision_, recall_ = results
             # correct = results[1] + results[2]
             # incorrect = results[3] + results[4]
             # acc = correct / (correct + incorrect)
-            final_results['accuracy'] = accuracy(tp, tn, fp, fn)
-            final_results['precision'] = precision(tp, tn, fp, fn)
-            final_results['recall'] = recall(tp, tn, fp, fn)
+            final_results['accuracy'] = accuracy_   #accuracy(tp, tn, fp, fn)
+            final_results['precision'] = precision_  #precision(tp, tn, fp, fn)
+            final_results['recall'] = 2*precision_*recall_ / (recall_ + precision_) #recall(tp, tn, fp, fn)
             final_results['f-score'] = f_score(tp, tn, fp, fn)
             print(f'Test accuracy ({epoch}):', final_results['accuracy'])
             print(f'Test Precision ({epoch}):', final_results['precision'])
