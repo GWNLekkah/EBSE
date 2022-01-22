@@ -140,12 +140,20 @@ def get_text_model(output_mode: str, embedding_vectors, info, do_compile=True):
                                                     large_pooling])
         model = tf.keras.layers.Flatten()(concatenated)
     model = tf.keras.layers.Dense(10, activation='relu')(model)
+    loss = tf.keras.losses.BinaryCrossentropy()
+    accuracy_metric = tf.keras.metrics.BinaryAccuracy()
     if output_mode == 'binary':
+        loss = tf.keras.losses.BinaryCrossentropy()
+        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
         model = tf.keras.layers.Dense(1, activation='sigmoid')(model)
     elif output_mode == 'eight':
+        loss = tf.keras.losses.CategoricalCrossentropy()
+        accuracy_metric = tf.keras.metrics.CategoricalAccuracy()
         model = tf.keras.layers.Dense(8, activation='sigmoid')(model)
     elif output_mode == 'four':
-        raise NotImplementedError
+        loss = tf.keras.losses.BinaryCrossentropy()
+        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
+        model = tf.keras.layers.Dense(4, activation='sigmoid')(model)
 
     # Other metrics
     # tf.keras.metrics.Accuracy()
@@ -159,11 +167,14 @@ def get_text_model(output_mode: str, embedding_vectors, info, do_compile=True):
     model = tf.keras.Model(inputs=text_inputs, outputs=model)
 
     model.compile(optimizer=tf.keras.optimizers.Adam(),
-                  loss=tf.keras.losses.BinaryCrossentropy(),
+                  loss=loss,
                   metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
                            tf.keras.metrics.TrueNegatives(thresholds=0.5),
                            tf.keras.metrics.FalsePositives(thresholds=0.5),
-                           tf.keras.metrics.FalseNegatives(thresholds=0.5)])
+                           tf.keras.metrics.FalseNegatives(thresholds=0.5),
+                           accuracy_metric,
+                           tf.keras.metrics.Precision(),
+                           tf.keras.metrics.Recall()])
 
     return model
 
@@ -198,15 +209,20 @@ def get_metadata_model(output_mode: str, feature_vector_length: int, do_compile=
                                     activation=keras.activations.relu,
                                     use_bias=True)(inputs)
     output_size = 1
-    loss = tf.keras.losses.BinaryCrossentropy
+    loss = tf.keras.losses.BinaryCrossentropy()
+    accuracy_metric = tf.keras.metrics.BinaryAccuracy()
     if output_mode == 'binary':
-        loss = tf.keras.losses.BinaryCrossentropy
+        loss = tf.keras.losses.BinaryCrossentropy()
+        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
         output_size = 1
     elif output_mode == 'eight':
-        loss = tf.keras.optimizers.CrossEntropy()
+        loss = tf.keras.losses.CategoricalCrossentropy()
+        accuracy_metric = tf.keras.metrics.CategoricalAccuracy()
         output_size = 8
     elif output_mode == 'four':
-        raise NotImplementedError
+        loss = tf.keras.losses.BinaryCrossentropy()
+        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
+        output_size = 4
     outputs = tf.keras.layers.Dense(output_size,
                                     activation=keras.activations.sigmoid,
                                     use_bias=True)(hidden1)
@@ -218,7 +234,10 @@ def get_metadata_model(output_mode: str, feature_vector_length: int, do_compile=
                   metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
                            tf.keras.metrics.TrueNegatives(thresholds=0.5),
                            tf.keras.metrics.FalsePositives(thresholds=0.5),
-                           tf.keras.metrics.FalseNegatives(thresholds=0.5)])
+                           tf.keras.metrics.FalseNegatives(thresholds=0.5),
+                           accuracy_metric,
+                           tf.keras.metrics.Precision(),
+                           tf.keras.metrics.Recall()])
     return model
 
 
@@ -251,14 +270,19 @@ def get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info)
     # 4: output
     output_size = 1
     loss = tf.keras.losses.BinaryCrossentropy()
+    accuracy_metric = tf.keras.metrics.BinaryAccuracy()
     if output_mode == 'binary':
         loss = tf.keras.losses.BinaryCrossentropy()
+        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
         output_size = 1
     elif output_mode == 'eight':
-        loss = tf.keras.optimizers.CrossEntropy()
+        loss = tf.keras.losses.CategoricalCrossentropy()
+        accuracy_metric = tf.keras.metrics.CategoricalAccuracy()
         output_size = 8
     elif output_mode == 'four':
-        raise NotImplementedError
+        loss = tf.keras.losses.BinaryCrossentropy()
+        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
+        output_size = 4
     outputs = tf.keras.layers.Dense(output_size,
                                     activation=keras.activations.sigmoid,
                                     use_bias=True)(merged)
@@ -268,9 +292,11 @@ def get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info)
                   metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
                            tf.keras.metrics.TrueNegatives(thresholds=0.5),
                            tf.keras.metrics.FalsePositives(thresholds=0.5),
-                           tf.keras.metrics.FalseNegatives(thresholds=0.5)])
+                           tf.keras.metrics.FalseNegatives(thresholds=0.5),
+                           accuracy_metric,
+                           tf.keras.metrics.Precision(),
+                           tf.keras.metrics.Recall()])
     return model
-
 
 
 
@@ -435,16 +461,22 @@ def accuracy(tp, tn, fp, fn):
 
 
 def precision(tp, tn, fp, fn):
+    if tp == fp == 0:
+        return float('nan')
     return tp / (tp + fp)
 
 
 def recall(tp, tn, fp, fn):
+    if tp == fn == 0:
+        return float('nan')
     return tp / (tp + fn)
 
 
 def f_score(tp, tn, fp, fn):
     prec = precision(tp, tn, fp, fn)
     rec = recall(tp, tn, fp, fn)
+    if prec + rec == 0:
+        return float('nan')
     return 2 * prec * rec / (prec + rec)
 
 
@@ -577,12 +609,17 @@ def main(output_mode: str,
                                            epochs)
             results.append(metrics)
 
+        for _ in range(15):
+            print()
         for key in ['accuracy', 'precision', 'recall', 'f-score']:
             stat_data = [metrics[key] for metrics in results]
             print('-' * 72)
             print(key.capitalize())
             print('    * Mean:', statistics.mean(stat_data))
-            print('    * Geometric Mean:', statistics.geometric_mean(stat_data))
+            try:
+                print('    * Geometric Mean:', statistics.geometric_mean(stat_data))
+            except statistics.StatisticsError:
+                pass
             #print('    * Harmonic Mean:', statistics.geometric_mean(stat_data))
             print('    * Standard Deviation:', statistics.stdev(stat_data))
             print('    * Median:', statistics.median(stat_data))
