@@ -300,7 +300,20 @@ def get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info)
                                     activation=keras.activations.sigmoid,
                                     use_bias=True)(merged)
     model = keras.models.Model(inputs=[text_inputs, data_inputs], outputs=outputs)
-    model.compile(optimizer=tf.keras.optimizers.Adam(),
+    #lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+    #    0.1,
+    #    decay_steps=10,
+    #    decay_rate=0.9,
+    #    staircase=True)
+    lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
+        initial_learning_rate=0.1,
+        decay_steps=10,
+        end_learning_rate=0.01,
+        power=2,
+        cycle=False,
+        name=None,
+    )
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule),
                   loss=loss,
                   metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
                            tf.keras.metrics.TrueNegatives(thresholds=0.5),
@@ -505,27 +518,61 @@ def train_and_test_model(model,
                          dataset_test,
                          epochs):
 
-    final_results = {}
-
     class MetricLogger(keras.callbacks.Callback):
+
+        def __init__(self):
+            super().__init__()
+            self.__tp = []
+            self.__fp = []
+            self.__tn = []
+            self.__fn = []
+            self.__loss = []
+            self.__accuracy = []
+            self.__precision = []
+            self.__recall = []
+            self.__f_score = []
+            self.__train_loss = []
+            self.__val_loss = []
+
         def on_epoch_end(self, epoch, logs=None):
             results = model.evaluate(x=test_x, y=test_y)
             print(results)
             loss, tp, tn, fp, fn, accuracy_, precision_, recall_ = results
-            # correct = results[1] + results[2]
-            # incorrect = results[3] + results[4]
-            # acc = correct / (correct + incorrect)
-            final_results['accuracy'] = accuracy_   #accuracy(tp, tn, fp, fn)
-            final_results['precision'] = precision_  #precision(tp, tn, fp, fn)
-            final_results['recall'] = recall_
-            if recall_ + precision_ == 0:
-                final_results['f-score'] = float('nan')
+            self.__train_loss.append(logs['loss'])
+            self.__val_loss.append(logs['val_loss'])
+            self.__tp.append(tp)
+            self.__tn.append(tn)
+            self.__fp.append(fp)
+            self.__fn.append(fn)
+            self.__loss.append(loss)
+            self.__accuracy.append(accuracy_)
+            self.__precision.append(precision_)
+            self.__recall.append(precision_)
+            if precision_ + recall_ == 0:
+                self.__f_score.append(float('nan'))
             else:
-                final_results['f-score'] = 2*precision_*recall_ / (recall_ + precision_) #recall(tp, tn, fp, fn)
-            print(f'Test accuracy ({epoch}):', final_results['accuracy'])
-            print(f'Test Precision ({epoch}):', final_results['precision'])
-            print(f'Test Recall ({epoch}):', final_results['recall'])
-            print(f'Test F-score ({epoch}):', final_results['f-score'])
+                self.__f_score.append(2*precision_*recall_ / (recall_ + precision_))
+            print(f'Test accuracy ({epoch}):', accuracy_)
+            print(f'Test Precision ({epoch}):', precision_)
+            print(f'Test Recall ({epoch}):', recall_)
+            print(f'Test F-score ({epoch}):', self.__f_score[-1])
+
+        def get_model_results_for_all_epochs(self):
+            return {
+                'fp': self.__fp,
+                'fn': self.__fn,
+                'tp': self.__tp,
+                'tn': self.__tn,
+                'loss': self.__loss,
+                'accuracy': self.__accuracy,
+                'precision': self.__precision,
+                'recall': self.__recall,
+                'f-score': self.__f_score,
+                'train-loss': self.__train_loss,
+                'val-loss': self.__val_loss
+            }
+
+    logger = MetricLogger()
 
     train_x, train_y = dataset_train
     test_x, test_y = dataset_test
@@ -534,9 +581,9 @@ def train_and_test_model(model,
               epochs=epochs if epochs > 0 else 1,
               shuffle=True,
               validation_data=dataset_val,
-              callbacks=[MetricLogger()])
+              callbacks=[logger])
 
-    return final_results
+    return logger.get_model_results_for_all_epochs()
 
 
 ##############################################################################
@@ -551,7 +598,8 @@ def main(output_mode: str,
          test_size: float,
          validation_size: float,
          epochs: int,
-         mode: str):
+         mode: str,
+         do_dump: bool):
     word_embedding, metadata, issue_labels, issue_types, resolutions = load_raw_data()
     features = list(make_feature_vectors(metadata,
                                          issue_labels,
@@ -593,7 +641,10 @@ def main(output_mode: str,
                                                                              test_size,
                                                                              validation_size)
         model = get_model(mode, output_mode, embedding_vectors, info)
-        train_and_test_model(model, dataset_train, dataset_val, dataset_test, epochs)
+        metrics = train_and_test_model(model, dataset_train, dataset_val, dataset_test, epochs)
+        if do_dump:
+            with open('model-metrics.json', 'w') as file:
+                json.dump(metrics, file)
 
     else:
         # https://medium.com/the-owl/k-fold-cross-validation-in-keras-3ec4a3a00538
@@ -632,7 +683,7 @@ def main(output_mode: str,
         for _ in range(15):
             print()
         for key in ['accuracy', 'precision', 'recall', 'f-score']:
-            stat_data = [metrics[key] for metrics in results]
+            stat_data = [metrics[key][-1] for metrics in results]
             print('-' * 72)
             print(key.capitalize())
             print('    * Mean:', statistics.mean(stat_data))
@@ -673,6 +724,10 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='all',
                         help=('Specify what data to use in the model. '
                               'Must be "metadata", "text", or "all".'))
+    parser.add_argument('--dump', action='store_true', default=True,
+                        help=('Dump data of the training mode. '
+                              'Only available with --cross normal')
+                        )
     args = parser.parse_args()
     if args.mode not in ('metadata', 'text', 'all'):
         print('Invalid mode:', args.mode)
@@ -689,4 +744,5 @@ if __name__ == '__main__':
          args.test_split_size,
          args.validation_split_size,
          args.epochs,
-         args.mode)
+         args.mode,
+         args.dump)
