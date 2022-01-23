@@ -156,6 +156,18 @@ def get_priority_index(priority: str):
 # Text Transformation
 ##############################################################################
 
+
+def make_bag_encoding(issues):
+    vocab, occurrences = make_vocab(['comment_list'],
+                                    ['summary', 'description'],
+                                    issues)
+    vocab, occurrences = filter_vocab(vocab, occurrences)
+    return {
+        'bag_size': len(vocab),
+        'data': one_hot_encoder(issues, vocab, ['description'], [])
+    }
+
+
 def make_word_embedding(issues):
     vocab, occurrences = make_vocab(['comment_list'],
                                     ['summary', 'description'],
@@ -204,6 +216,7 @@ def transform_issues(issues, text_mode):
         'uses_embedding': text_mode == 'embedding',
         'uses_matrix': text_mode == 'matrix',
         'uses_document': text_mode == 'document',
+        'uses_frequencies': text_mode == 'bag'
     }
     if text_mode == 'embedding':
         embedding = make_word_embedding(issues)
@@ -217,6 +230,12 @@ def transform_issues(issues, text_mode):
         embedding = make_document_embedding(issues)
         metadata['doc_embedding'] = {
             'vector_size': embedding['vector_size']
+        }
+        word_data = embedding['data']
+    elif text_mode == 'bag':
+        embedding = make_bag_encoding(issues)
+        metadata['bag'] = {
+            'size': embedding['bag_size']
         }
         word_data = embedding['data']
     else:
@@ -254,6 +273,7 @@ def transform_issues(issues, text_mode):
     #assert len(embedding['data']) == len(issue_type)
     #assert len(embedding['data']) == len(issues)
     print('Building new issues')
+    print(len(issues), len(word_data))
     for index in range(0, len(issues)):
         issue = issues[index]
         new_issue = {
@@ -321,10 +341,10 @@ if __name__ == '__main__':
                         help='Files of preprocess')
     parser.add_argument('--text-mode', type=str, default='embedding',
                         help=('Method in which text should be processed. '
-                              'Should be "embedding", "document", or "matrix".')
+                              'Should be "embedding", "document", "bag", or "matrix".')
                         )
     args = parser.parse_args()
-    if args.text_mode not in ('embedding', 'matrix', 'document'):
+    if args.text_mode not in ('embedding', 'matrix', 'document', 'bag'):
         print('Invalid --text-mode:', args.text_mode)
         sys.exit()
     main(args.files, args.text_mode)

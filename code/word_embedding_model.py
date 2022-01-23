@@ -143,6 +143,10 @@ def get_text_model(output_mode: str, embedding_vectors, info, do_compile=True):
         text_inputs = tf.keras.layers.Input(shape=(info['document']['vector_size'],))
         hidden = tf.keras.layers.Dense(64)
         model = tf.keras.layers.Dense(32)(hidden)
+    elif info['uses_frequencies']:
+        text_inputs = tf.keras.layers.Input(shape=(info['bag']['size'],))
+        hidden = tf.keras.layers.Dense(64)(text_inputs)
+        model = tf.keras.layers.Dense(32)(hidden)
     else:
         raise NotImplementedError
 
@@ -268,7 +272,11 @@ def get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info)
         flattened = tf.keras.layers.Flatten()(concatenated)
     elif input_info['uses_document']:
         text_inputs = tf.keras.layers.Input(shape=(input_info['document']['vector_size'],))
-        hidden = tf.keras.layers.Dense(64)
+        hidden = tf.keras.layers.Dense(64)(text_inputs)
+        flattened = tf.keras.layers.Dense(32)(hidden)
+    elif input_info['uses_frequencies']:
+        text_inputs = tf.keras.layers.Input(shape=(input_info['bag']['size'],))
+        hidden = tf.keras.layers.Dense(64)(text_inputs)
         flattened = tf.keras.layers.Dense(32)(hidden)
     else:
         raise NotImplementedError
@@ -300,19 +308,19 @@ def get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info)
                                     activation=keras.activations.sigmoid,
                                     use_bias=True)(merged)
     model = keras.models.Model(inputs=[text_inputs, data_inputs], outputs=outputs)
-    #lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-    #    0.1,
-    #    decay_steps=10,
-    #    decay_rate=0.9,
-    #    staircase=True)
-    lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
-        initial_learning_rate=0.1,
+    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+        0.1,
         decay_steps=10,
-        end_learning_rate=0.01,
-        power=2,
-        cycle=False,
-        name=None,
-    )
+        decay_rate=0.95,
+        staircase=True)
+    #lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
+    #    initial_learning_rate=0.1,
+    #    decay_steps=10,
+    #    end_learning_rate=0.01,
+    #    power=2,
+    #    cycle=False,
+    #    name=None,
+    #)
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule),
                   loss=loss,
                   metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
@@ -323,7 +331,6 @@ def get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info)
                            tf.keras.metrics.Precision(),
                            tf.keras.metrics.Recall()])
     return model
-
 
 
 ##############################################################################
@@ -547,7 +554,7 @@ def train_and_test_model(model,
             self.__loss.append(loss)
             self.__accuracy.append(accuracy_)
             self.__precision.append(precision_)
-            self.__recall.append(precision_)
+            self.__recall.append(recall_)
             if precision_ + recall_ == 0:
                 self.__f_score.append(float('nan'))
             else:
@@ -625,6 +632,9 @@ def main(output_mode: str,
         raw_embedding = None
         embedding_vectors = None
     elif info['uses_document']:
+        raw_embedding = None
+        embedding_vectors = None
+    elif info['uses_frequencies']:
         raw_embedding = None
         embedding_vectors = None
     else:
