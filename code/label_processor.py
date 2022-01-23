@@ -34,7 +34,7 @@ def main(files: list[str]):
     labels = {
         'binary': [],
         'groups_8': [],
-        'groups_4': []
+        'groups_3': []
     }
     for filename in files:
         with open(filename) as file:
@@ -54,7 +54,7 @@ def main(files: list[str]):
                 is_architectural = sum(key) > 0
                 labels['groups_8'].append(GROUP_8_LOOKUP[key])
                 labels['binary'].append(is_architectural)
-                labels['groups_4'].append((is_architectural,) + key)
+                labels['groups_3'].append(key)
     with open('labels.json', 'w') as file:
         json.dump(labels, file, indent=4)
 
@@ -71,5 +71,3 @@ if __name__ == '__main__':
                         help='Files of preprocess')
     args = parser.parse_args()
     main(args.files)
-
-

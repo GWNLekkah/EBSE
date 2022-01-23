@@ -57,8 +57,8 @@ def load_labels(output_mode):
         return labels['binary']
     elif output_mode == 'eight':
         return labels['groups_8']
-    elif output_mode == 'four':
-        return labels['groups_4']
+    elif output_mode == 'three':
+        return labels['groups_3']
 
 
 ##############################################################################
@@ -101,6 +101,10 @@ def get_weight_matrix(embedding, vocab):
 def get_model(input_mode, output_mode, embedding_vectors, input_info):
     if input_mode == 'text':
         return get_text_model(output_mode, embedding_vectors, input_info)
+    if input_mode == 'rnn':
+        return get_rnn_model(output_mode)
+    if input_mode == 'embedding-cnn':
+        return get_embedding_cnn_model(output_mode)
     metadata_length = (input_info['#_numerical_fields'] +
                        input_info['labels_length'] +
                        input_info['resolution_length'] +
@@ -151,33 +155,85 @@ def get_text_model(output_mode: str, embedding_vectors, info, do_compile=True):
         raise NotImplementedError
 
     model = tf.keras.layers.Dense(10, activation='relu')(model)
-    loss = tf.keras.losses.BinaryCrossentropy()
-    accuracy_metric = tf.keras.metrics.BinaryAccuracy()
-    if output_mode == 'binary':
-        loss = tf.keras.losses.BinaryCrossentropy()
-        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
-        model = tf.keras.layers.Dense(1, activation='sigmoid')(model)
-    elif output_mode == 'eight':
-        loss = tf.keras.losses.CategoricalCrossentropy()
-        accuracy_metric = tf.keras.metrics.CategoricalAccuracy()
-        model = tf.keras.layers.Dense(8, activation='sigmoid')(model)
-    elif output_mode == 'four':
-        loss = tf.keras.losses.BinaryCrossentropy()
-        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
-        model = tf.keras.layers.Dense(4, activation='sigmoid')(model)
+    loss, accuracy_metric, model = get_output_layer(output_mode, model)
 
-    # Other metrics
-    # tf.keras.metrics.Accuracy()
-    # tf.keras.metrics.BinaryAccuracy()
-    # tf.keras.metrics.CategoricalAccuracy()
-    # tf.metrics.Precision(thresholds=0.5)
-    # tf.keras.metrics.Recall(thresholds=0.5)
     if not do_compile:
         return model
 
     model = tf.keras.Model(inputs=text_inputs, outputs=model)
 
-    model.compile(optimizer=tf.keras.optimizers.Adam(),
+    lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
+        initial_learning_rate=0.001,
+        decay_steps=300,
+        end_learning_rate=0.0001,
+        power=1,
+        cycle=False,
+        name=None,
+    )
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule),
+                  loss=loss,
+                  metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
+                           tf.keras.metrics.TrueNegatives(thresholds=0.5),
+                           tf.keras.metrics.FalsePositives(thresholds=0.5),
+                           tf.keras.metrics.FalseNegatives(thresholds=0.5),
+                           accuracy_metric,
+                           tf.keras.metrics.Precision(),
+                           tf.keras.metrics.Recall()])
+
+    return model
+
+
+def get_rnn_model(output_mode: str):
+    with open('word_embedding/embedding_weights.json') as file:
+        loaded_glove = json.load(file)
+
+    for idx in range(len(loaded_glove)):
+        loaded_glove[idx] = numpy.asarray(loaded_glove[idx])
+    loaded_glove = numpy.asarray(loaded_glove)
+
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.Embedding(len(loaded_glove), 300, weights=[loaded_glove],
+                                        input_length=100, trainable=True))
+
+    model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64)))
+    model.add(tf.keras.layers.Dense(64, activation='relu'))
+
+    loss, accuracy_metric, layer = get_output_layer(output_mode)
+    model.add(layer)
+
+    model.compile(optimizer=tf.keras.optimizers.Adam(0.001),
+                  loss=loss,
+                  metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
+                           tf.keras.metrics.TrueNegatives(thresholds=0.5),
+                           tf.keras.metrics.FalsePositives(thresholds=0.5),
+                           tf.keras.metrics.FalseNegatives(thresholds=0.5),
+                           accuracy_metric,
+                           tf.keras.metrics.Precision(),
+                           tf.keras.metrics.Recall()])
+
+    return model
+
+
+def get_embedding_cnn_model(output_mode: str):
+    with open('word_embedding/embedding_weights.json') as file:
+        loaded_glove = json.load(file)
+
+    for idx in range(len(loaded_glove)):
+        loaded_glove[idx] = numpy.asarray(loaded_glove[idx])
+    loaded_glove = numpy.asarray(loaded_glove)
+
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.Embedding(len(loaded_glove), 300, weights=[loaded_glove],
+                                        input_length=100, trainable=True))
+
+    model.add(tf.keras.layers.Conv1D(filters=32, kernel_size=3, activation='relu'))
+    model.add(tf.keras.layers.MaxPooling1D(pool_size=1))
+    model.add(tf.keras.layers.Flatten())
+
+    loss, accuracy_metric, layer = get_output_layer(output_mode)
+    model.add(layer)
+
+    model.compile(optimizer=tf.keras.optimizers.Adam(0.001),
                   loss=loss,
                   metrics=[tf.keras.metrics.TruePositives(thresholds=0.5),
                            tf.keras.metrics.TrueNegatives(thresholds=0.5),
@@ -219,24 +275,9 @@ def get_metadata_model(output_mode: str, feature_vector_length: int, do_compile=
     hidden1 = tf.keras.layers.Dense(64,
                                     activation=keras.activations.relu,
                                     use_bias=True)(inputs)
-    output_size = 1
-    loss = tf.keras.losses.BinaryCrossentropy()
-    accuracy_metric = tf.keras.metrics.BinaryAccuracy()
-    if output_mode == 'binary':
-        loss = tf.keras.losses.BinaryCrossentropy()
-        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
-        output_size = 1
-    elif output_mode == 'eight':
-        loss = tf.keras.losses.CategoricalCrossentropy()
-        accuracy_metric = tf.keras.metrics.CategoricalAccuracy()
-        output_size = 8
-    elif output_mode == 'four':
-        loss = tf.keras.losses.BinaryCrossentropy()
-        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
-        output_size = 4
-    outputs = tf.keras.layers.Dense(output_size,
-                                    activation=keras.activations.sigmoid,
-                                    use_bias=True)(hidden1)
+
+    loss, accuracy_metric, outputs = get_output_layer(output_mode, hidden1)
+
     model = keras.models.Model(inputs=[inputs], outputs=outputs)
     if not do_compile:
         return model
@@ -289,24 +330,8 @@ def get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info)
     merged = tf.keras.layers.concatenate([flattened, hidden])
 
     # 4: output
-    output_size = 1
-    loss = tf.keras.losses.BinaryCrossentropy()
-    accuracy_metric = tf.keras.metrics.BinaryAccuracy()
-    if output_mode == 'binary':
-        loss = tf.keras.losses.BinaryCrossentropy()
-        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
-        output_size = 1
-    elif output_mode == 'eight':
-        loss = tf.keras.losses.CategoricalCrossentropy()
-        accuracy_metric = tf.keras.metrics.CategoricalAccuracy()
-        output_size = 8
-    elif output_mode == 'four':
-        loss = tf.keras.losses.BinaryCrossentropy()
-        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
-        output_size = 4
-    outputs = tf.keras.layers.Dense(output_size,
-                                    activation=keras.activations.sigmoid,
-                                    use_bias=True)(merged)
+    loss, accuracy_metric, outputs = get_output_layer(output_mode, merged)
+
     model = keras.models.Model(inputs=[text_inputs, data_inputs], outputs=outputs)
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
         0.1,
@@ -331,6 +356,33 @@ def get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info)
                            tf.keras.metrics.Precision(),
                            tf.keras.metrics.Recall()])
     return model
+
+
+def get_output_layer(output_mode, previous_layer=None):
+    if output_mode == 'binary':
+        loss = tf.keras.losses.BinaryCrossentropy()
+        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
+        if previous_layer is None:
+            layer = tf.keras.layers.Dense(1, activation='sigmoid')
+        else:
+            layer = tf.keras.layers.Dense(1, activation='sigmoid')(previous_layer)
+    elif output_mode == 'eight':
+        loss = tf.keras.losses.CategoricalCrossentropy()
+        accuracy_metric = tf.keras.metrics.CategoricalAccuracy()
+        if previous_layer is None:
+            layer = tf.keras.layers.Dense(8, activation='sigmoid')
+        else:
+            layer = tf.keras.layers.Dense(8, activation='sigmoid')(previous_layer)
+    elif output_mode == 'three':
+        loss = tf.keras.losses.BinaryCrossentropy()
+        accuracy_metric = tf.keras.metrics.BinaryAccuracy()
+        if previous_layer is None:
+            layer = tf.keras.layers.Dense(3, activation='sigmoid')
+        else:
+            layer = tf.keras.layers.Dense(3, activation='sigmoid')(previous_layer)
+    else:
+        raise "wrong output mode"
+    return loss, accuracy_metric, layer
 
 
 ##############################################################################
@@ -617,7 +669,7 @@ def main(output_mode: str,
 
     if mode == 'metadata':
         data = features
-    elif mode == 'text':
+    elif mode in ['text', 'embedding-cnn', 'rnn']:
         data = word_embedding
     else:
         data = None
@@ -716,7 +768,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=str, default='binary',
                         help=('Output mode for the neural network. '
-                              'Must be one of "binary", "eight", or "four"')
+                              'Must be one of "binary", "eight", or "three"')
                         )
     parser.add_argument('--cross', type=str, default='none',
                         help=('Configure cross fold validation. '
@@ -739,10 +791,10 @@ if __name__ == '__main__':
                               'Only available with --cross normal')
                         )
     args = parser.parse_args()
-    if args.mode not in ('metadata', 'text', 'all'):
+    if args.mode not in ('metadata', 'text', 'rnn', 'embedding-cnn', 'all'):
         print('Invalid mode:', args.mode)
         sys.exit()
-    if args.output not in ('binary', 'eight', 'four'):
+    if args.output not in ('binary', 'eight', 'three'):
         print('Invalid output mode:', args.output)
         sys.exit()
     if args.cross not in ('none', 'normal', 'test'):

@@ -185,10 +185,13 @@ def make_word_embedding(issues):
         return json.load(file)
 
 
-def make_word_matrix(issues):
+def make_word_matrix(issues, pretrained_filepath: str):
     with change_wd('./word_embedding'):
         print('Waiting for subprocess to finish')
-        subprocess.run('py -3.9 text2d.py')
+        if pretrained_filepath == '':
+            subprocess.run('py -3.9 text2d.py')
+        else:
+            subprocess.run('py -3.9 text2d.py --pretrained-filepath ' + pretrained_filepath)
         print('Subprocess done')
     with open('./word_embedding/text2d.json') as file:
         return json.load(file)
@@ -209,7 +212,7 @@ def make_document_embedding(issues):
 ##############################################################################
 
 
-def transform_issues(issues, text_mode):
+def transform_issues(issues, text_mode, pretrained_filepath: str):
     print('Making word embedding')
     metadata = {
         '#_numerical_fields': 12,
@@ -239,7 +242,7 @@ def transform_issues(issues, text_mode):
         }
         word_data = embedding['data']
     else:
-        word_data = make_word_matrix(issues)
+        word_data = make_word_matrix(issues, pretrained_filepath)
         metadata['matrix'] = {
             'size': [
                 len(word_data[0]),
@@ -306,7 +309,7 @@ def transform_issues(issues, text_mode):
 ##############################################################################
 
 
-def main(files: list[str], text_mode):
+def main(files: list[str], text_mode, pretrained_filepath: str):
     # Preprocessing steps:
     #   1) Extract vocabulary
     #   2) Filter vocabulary
@@ -321,7 +324,7 @@ def main(files: list[str], text_mode):
         with open(filename) as file:
             issues += json.load(file)
     print('Processing issues')
-    new_issues, metadata = transform_issues(issues, text_mode)
+    new_issues, metadata = transform_issues(issues, text_mode, pretrained_filepath)
     print('Saving new issues')
     with open('transformed.json', 'w') as file:
         json.dump(new_issues, file)
@@ -343,10 +346,10 @@ if __name__ == '__main__':
                         help=('Method in which text should be processed. '
                               'Should be "embedding", "document", "bag", or "matrix".')
                         )
+    parser.add_argument('--pretrained-filepath', type=str, default='',
+                        help='Give the file path to a pretrained word2vec file')
     args = parser.parse_args()
     if args.text_mode not in ('embedding', 'matrix', 'document', 'bag'):
         print('Invalid --text-mode:', args.text_mode)
         sys.exit()
-    main(args.files, args.text_mode)
-
-
+    main(args.files, args.text_mode, args.pretrained_filepath)
