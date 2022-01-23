@@ -182,6 +182,15 @@ def make_word_matrix(issues):
         return json.load(file)
 
 
+def make_document_embedding(issues):
+    with change_wd('./word_embedding'):
+        print('Waiting for subprocess to finish')
+        subprocess.run('py -3.9 document_embedding.py')
+        print('Subprocess done')
+    with open('./word_embedding/document_embedding.json') as file:
+        return json.load(file)
+
+
 ##############################################################################
 ##############################################################################
 # Single-file transformation functions
@@ -193,7 +202,8 @@ def transform_issues(issues, text_mode):
     metadata = {
         '#_numerical_fields': 12,
         'uses_embedding': text_mode == 'embedding',
-        'uses_matrix': text_mode == 'matrix'
+        'uses_matrix': text_mode == 'matrix',
+        'uses_document': text_mode == 'document',
     }
     if text_mode == 'embedding':
         embedding = make_word_embedding(issues)
@@ -201,6 +211,12 @@ def transform_issues(issues, text_mode):
             'word_index': embedding['word_index'],
             'vocab_size': embedding['vocab_size'],
             'sequence_len': embedding['sequence_len']
+        }
+        word_data = embedding['data']
+    elif text_mode == 'document':
+        embedding = make_document_embedding(issues)
+        metadata['doc_embedding'] = {
+            'vector_size': embedding['vector_size']
         }
         word_data = embedding['data']
     else:
@@ -305,10 +321,10 @@ if __name__ == '__main__':
                         help='Files of preprocess')
     parser.add_argument('--text-mode', type=str, default='embedding',
                         help=('Method in which text should be processed. '
-                              'Should be "embedding" or "matrix".')
+                              'Should be "embedding", "document", or "matrix".')
                         )
     args = parser.parse_args()
-    if args.text_mode not in ('embedding', 'matrix'):
+    if args.text_mode not in ('embedding', 'matrix', 'document'):
         print('Invalid --text-mode:', args.text_mode)
         sys.exit()
     main(args.files, args.text_mode)

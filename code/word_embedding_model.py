@@ -119,7 +119,7 @@ def get_text_model(output_mode: str, embedding_vectors, info, do_compile=True):
                                          activation='relu')(text_inputs)
         hidden = tf.keras.layers.MaxPooling1D(pool_size=2)(hidden)
         model = tf.keras.layers.Flatten()(hidden)
-    else:
+    elif info['uses_matrix']:
         # 1: text input
         width = info['matrix']['size'][1]
         height = info['matrix']['size'][0]
@@ -139,6 +139,13 @@ def get_text_model(output_mode: str, embedding_vectors, info, do_compile=True):
                                                     medium_pooling,
                                                     large_pooling])
         model = tf.keras.layers.Flatten()(concatenated)
+    elif info['uses_document']:
+        text_inputs = tf.keras.layers.Input(shape=(info['document']['vector_size'],))
+        hidden = tf.keras.layers.Dense(64)
+        model = tf.keras.layers.Dense(32)(hidden)
+    else:
+        raise NotImplementedError
+
     model = tf.keras.layers.Dense(10, activation='relu')(model)
     loss = tf.keras.losses.BinaryCrossentropy()
     accuracy_metric = tf.keras.metrics.BinaryAccuracy()
@@ -243,22 +250,28 @@ def get_metadata_model(output_mode: str, feature_vector_length: int, do_compile=
 
 def get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info):
     # 1: text input
-    width = input_info['matrix']['size'][1]
-    height = input_info['matrix']['size'][0]
-    print(width)
-    text_inputs = tf.keras.layers.Input(shape=tuple(input_info['matrix']['size']) + (1,))
-    small_convolution = tf.keras.layers.Conv2D(32, (1, width), activation='relu')(text_inputs)
-    medium_convolution = tf.keras.layers.Conv2D(32, (2, width), activation='relu')(text_inputs)
-    large_convolution = tf.keras.layers.Conv2D(32, (3, width), activation='relu')(text_inputs)
+    if input_info['uses_matrix']:
+        width = input_info['matrix']['size'][1]
+        height = input_info['matrix']['size'][0]
+        text_inputs = tf.keras.layers.Input(shape=tuple(input_info['matrix']['size']) + (1,))
+        small_convolution = tf.keras.layers.Conv2D(32, (1, width), activation='relu')(text_inputs)
+        medium_convolution = tf.keras.layers.Conv2D(32, (2, width), activation='relu')(text_inputs)
+        large_convolution = tf.keras.layers.Conv2D(32, (3, width), activation='relu')(text_inputs)
 
-    small_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height, 1))(small_convolution)
-    medium_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height - 1, 1))(medium_convolution)
-    large_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height - 2, 1))(large_convolution)
+        small_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height, 1))(small_convolution)
+        medium_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height - 1, 1))(medium_convolution)
+        large_pooling = tf.keras.layers.MaxPooling2D(pool_size=(height - 2, 1))(large_convolution)
 
-    concatenated = tf.keras.layers.concatenate([small_pooling,
-                                               medium_pooling,
-                                               large_pooling])
-    flattened = tf.keras.layers.Flatten()(concatenated)
+        concatenated = tf.keras.layers.concatenate([small_pooling,
+                                                   medium_pooling,
+                                                   large_pooling])
+        flattened = tf.keras.layers.Flatten()(concatenated)
+    elif input_info['uses_document']:
+        text_inputs = tf.keras.layers.Input(shape=(input_info['document']['vector_size'],))
+        hidden = tf.keras.layers.Dense(64)
+        flattened = tf.keras.layers.Dense(32)(hidden)
+    else:
+        raise NotImplementedError
 
     # 2: metadata input
     data_inputs = tf.keras.layers.Input(shape=(metadata_length,))
@@ -504,8 +517,11 @@ def train_and_test_model(model,
             # acc = correct / (correct + incorrect)
             final_results['accuracy'] = accuracy_   #accuracy(tp, tn, fp, fn)
             final_results['precision'] = precision_  #precision(tp, tn, fp, fn)
-            final_results['recall'] = 2*precision_*recall_ / (recall_ + precision_) #recall(tp, tn, fp, fn)
-            final_results['f-score'] = f_score(tp, tn, fp, fn)
+            final_results['recall'] = recall_
+            if recall_ + precision_ == 0:
+                final_results['f-score'] = float('nan')
+            else:
+                final_results['f-score'] = 2*precision_*recall_ / (recall_ + precision_) #recall(tp, tn, fp, fn)
             print(f'Test accuracy ({epoch}):', final_results['accuracy'])
             print(f'Test Precision ({epoch}):', final_results['precision'])
             print(f'Test Recall ({epoch}):', final_results['recall'])
@@ -558,6 +574,9 @@ def main(output_mode: str,
         raw_embedding = load_embedding('word_embedding/word2vec.txt')
         embedding_vectors = get_weight_matrix(raw_embedding, info['embedding']['word_index'])
     elif info['uses_matrix']:
+        raw_embedding = None
+        embedding_vectors = None
+    elif info['uses_document']:
         raw_embedding = None
         embedding_vectors = None
     else:
