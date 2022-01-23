@@ -140,8 +140,8 @@ def get_text_model(output_mode: str, embedding_vectors, info, do_compile=True):
                                                     large_pooling])
         model = tf.keras.layers.Flatten()(concatenated)
     elif info['uses_document']:
-        text_inputs = tf.keras.layers.Input(shape=(info['document']['vector_size'],))
-        hidden = tf.keras.layers.Dense(64)
+        text_inputs = tf.keras.layers.Input(shape=(info['doc_embedding']['vector_size'],))
+        hidden = tf.keras.layers.Dense(64)(text_inputs)
         model = tf.keras.layers.Dense(32)(hidden)
     elif info['uses_frequencies']:
         text_inputs = tf.keras.layers.Input(shape=(info['bag']['size'],))
@@ -271,7 +271,7 @@ def get_mixed_model(output_mode, embedding_vectors, metadata_length, input_info)
                                                    large_pooling])
         flattened = tf.keras.layers.Flatten()(concatenated)
     elif input_info['uses_document']:
-        text_inputs = tf.keras.layers.Input(shape=(input_info['document']['vector_size'],))
+        text_inputs = tf.keras.layers.Input(shape=(input_info['doc_embedding']['vector_size'],))
         hidden = tf.keras.layers.Dense(64)(text_inputs)
         flattened = tf.keras.layers.Dense(32)(hidden)
     elif input_info['uses_frequencies']:
