@@ -465,8 +465,8 @@ def cross_validation_data(data, labels, splits):
         for inner_index, (train, validation) in enumerate(inner_kfold.split(data[inner], labels[inner]), start=1):
             yield (outer_index,
                    inner_index,
-                   (data[train], labels[train]),
-                   (data[validation], labels[validation]),
+                   (data[inner][train], labels[inner][train]),
+                   (data[inner][validation], labels[inner][validation]),
                    test_dataset)
 
 
@@ -485,12 +485,12 @@ def cross_validation_data_mixed(word_embedding, features, labels, splits):
         iterator = enumerate(inner_kfold.split(word_embedding[inner], labels[inner]), start=1)
         for inner_index, (train, validation) in iterator:
             train_dataset = (
-                [word_embedding[train], features[train]],
-                labels[train]
+                [word_embedding[inner][train], features[inner][train]],
+                labels[inner][train]
             )
             validation_dataset = (
-                [word_embedding[validation], features[validation]],
-                labels[validation]
+                [word_embedding[inner][validation], features[inner][validation]],
+                labels[inner][validation]
             )
             yield (outer_index,
                    inner_index,
