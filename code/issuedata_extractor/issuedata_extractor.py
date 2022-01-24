@@ -28,7 +28,7 @@ def get_issue_var(fields, name, field_type='str'):
 def main():
     # Parsing
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv_path", type=str, default=None)
+    parser.add_argument("--csv-path", type=str, default=None)
     args = parser.parse_args()
 
     # Read the issue keys into a dict
@@ -102,11 +102,11 @@ def main():
         dictionary = {
             'key': issue.key,
             'summary': get_issue_var(fields, 'summary'),
-            'summary_length': len(get_issue_var(fields, 'summary')),
+            'summary_length': len(get_issue_var(fields, 'summary').split()),
             'description': get_issue_var(fields, 'description'),
-            'description_length': len(get_issue_var(fields, 'description')),
+            'description_length': len(get_issue_var(fields, 'description').split()),
             'comment_list': comment_list,
-            'comment_length': sum([len(comment) for comment in comment_list]),
+            'comment_length': sum([len(comment.split()) for comment in comment_list]),
             '#_comments': len(comment_list),
             '#_attachments': attachment_count,
             '#_issuelinks': len(get_issue_var(fields, 'issuelinks')),
