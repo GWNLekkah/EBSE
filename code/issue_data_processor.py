@@ -179,20 +179,19 @@ def make_word_embedding(issues):
         json.dump(occurrences, file)
     with change_wd('./word_embedding'):
         print('Waiting for subprocess to finish')
-        subprocess.run('py -3.9 word_embedding.py')
+        subprocess.run('python word_embedding.py')
         print('Subprocess done')
     with open('./word_embedding/word_embedding.json') as file:
         return json.load(file)
 
 
 def make_word_matrix(issues, pretrained_filepath: str):
-    with change_wd('./word_embedding'):
-        print('Waiting for subprocess to finish')
-        if pretrained_filepath == '':
-            subprocess.run('py -3.9 text2d.py')
-        else:
-            subprocess.run('py -3.9 text2d.py --pretrained-filepath ' + pretrained_filepath)
-        print('Subprocess done')
+    print('Waiting for subprocess to finish')
+    if pretrained_filepath == '':
+        subprocess.run('python ./word_embedding/text2d.py')
+    else:
+        subprocess.run('python ./word_embedding/text2d.py --pretrained-filepath ' + pretrained_filepath)
+    print('Subprocess done')
     with open('./word_embedding/text2d.json') as file:
         return json.load(file)
 
@@ -200,7 +199,7 @@ def make_word_matrix(issues, pretrained_filepath: str):
 def make_document_embedding(issues):
     with change_wd('./word_embedding'):
         print('Waiting for subprocess to finish')
-        subprocess.run('py -3.9 document_embedding.py')
+        subprocess.run('python document_embedding.py')
         print('Subprocess done')
     with open('./word_embedding/document_embedding.json') as file:
         return json.load(file)

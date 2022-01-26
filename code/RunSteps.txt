@@ -1,0 +1,8 @@
+pip install -r requirements.txt
+python label_processor.py ./label_reader/architectural.csv ./label_reader/non_archictural.csv
+## Hoeft maar een keer gerund te worden.
+python issue_data_processor.py
+##Bag of words versie
+python issue_data_processor.py --text-mode bag ./issuedata_extractor/architectural_issues.json ./issuedata_extractor/non_architectural_issues.json
+##Action model training + testing
+python word_embedding_model --mode metadata --output binary --cross test 
