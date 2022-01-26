@@ -185,13 +185,16 @@ def make_word_embedding(issues):
         return json.load(file)
 
 
-def make_word_matrix(issues, pretrained_filepath: str):
+def make_word_matrix(issues, pretrained_filepath: str, vector_length: int, output_mode: str):
     with change_wd('./word_embedding'):
         print('Waiting for subprocess to finish')
         if pretrained_filepath == '':
-            subprocess.run('py -3.9 text2d.py')
+            subprocess.run('py -3.9 text2d.py --vector-length ' + str(vector_length)
+                           + ' --output-mode ' + output_mode)
         else:
-            subprocess.run('py -3.9 text2d.py --pretrained-filepath ' + pretrained_filepath)
+            subprocess.run('py -3.9 text2d.py --pretrained-filepath ' + pretrained_filepath
+                           + ' --vector-length ' + str(vector_length) + ' --output-mode '
+                           + output_mode)
         print('Subprocess done')
     with open('./word_embedding/text2d.json') as file:
         return json.load(file)
@@ -212,7 +215,8 @@ def make_document_embedding(issues):
 ##############################################################################
 
 
-def transform_issues(issues, text_mode, pretrained_filepath: str):
+def transform_issues(issues, text_mode, pretrained_filepath: str, vector_length: int,
+                     output_mode: str):
     print('Making word embedding')
     metadata = {
         '#_numerical_fields': 12,
@@ -242,7 +246,7 @@ def transform_issues(issues, text_mode, pretrained_filepath: str):
         }
         word_data = embedding['data']
     else:
-        word_data = make_word_matrix(issues, pretrained_filepath)
+        word_data = make_word_matrix(issues, pretrained_filepath, vector_length, output_mode)
         metadata['matrix'] = {
             'size': [
                 len(word_data[0]),
@@ -309,7 +313,8 @@ def transform_issues(issues, text_mode, pretrained_filepath: str):
 ##############################################################################
 
 
-def main(files: list[str], text_mode, pretrained_filepath: str):
+def main(files: list[str], text_mode, pretrained_filepath: str, vector_length: int,
+         output_mode: str):
     # Preprocessing steps:
     #   1) Extract vocabulary
     #   2) Filter vocabulary
@@ -324,7 +329,8 @@ def main(files: list[str], text_mode, pretrained_filepath: str):
         with open(filename) as file:
             issues += json.load(file)
     print('Processing issues')
-    new_issues, metadata = transform_issues(issues, text_mode, pretrained_filepath)
+    new_issues, metadata = transform_issues(issues, text_mode, pretrained_filepath,
+                                            vector_length, output_mode)
     print('Saving new issues')
     with open('transformed.json', 'w') as file:
         json.dump(new_issues, file)
@@ -348,8 +354,15 @@ if __name__ == '__main__':
                         )
     parser.add_argument('--pretrained-filepath', type=str, default='',
                         help='Give the file path to a pretrained word2vec file')
+    parser.add_argument('--vector-length', type=int, default=300,
+                        help='Set the length of the vector in the word2vec representation')
+    parser.add_argument('--output-mode', type=str, default='index',
+                        help='Set the output mode')
     args = parser.parse_args()
     if args.text_mode not in ('embedding', 'matrix', 'document', 'bag'):
         print('Invalid --text-mode:', args.text_mode)
         sys.exit()
-    main(args.files, args.text_mode, args.pretrained_filepath)
+    if args.output_mode not in ('index', '2D'):
+        print('Invalid --output-mode:', args.text_mode)
+        sys.exit()
+    main(args.files, args.text_mode, args.pretrained_filepath, args.vector_length, args.output_mode)
