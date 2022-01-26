@@ -6,6 +6,7 @@
 import argparse
 import csv
 import json
+import sys
 
 
 GROUP_8_LOOKUP = {
@@ -36,6 +37,7 @@ def main(files: list[str]):
         'groups_8': [],
         'groups_4': []
     }
+    csv.field_size_limit(sys.maxsize)
     for filename in files:
         with open(filename) as file:
             print('Reading labels from:', file)
