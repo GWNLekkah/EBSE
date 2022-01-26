@@ -745,6 +745,7 @@ def main(output_mode: str,
         for _ in range(15):
             print()
         for key in ['accuracy', 'precision', 'recall', 'f-score']:
+            # TODO: Call StorageFunction
             stat_data = [metrics[key][-1] for metrics in results]
             print('-' * 72)
             print(key.capitalize())
