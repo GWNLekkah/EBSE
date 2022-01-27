@@ -5,4 +5,4 @@ python issue_data_processor.py
 ##Bag of words versie
 python issue_data_processor.py --text-mode bag ./issuedata_extractor/architectural_issues.json ./issuedata_extractor/non_architectural_issues.json
 ##Action model training + testing
-python word_embedding_model --mode metadata --output binary --cross test 
+python word_embedding_model.py --mode metadata --output binary --cross test 

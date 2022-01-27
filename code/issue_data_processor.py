@@ -211,8 +211,8 @@ def make_document_embedding(issues):
 ##############################################################################
 
 
-def transform_issues(issues, text_mode, pretrained_filepath: str):
-    print('Making word embedding')
+def transform_issues(issues, text_mode, pretrained_filepath: str, metaDataFilter: str):
+    print('Making word embedding, \t metaDataFilter chosen:', metaDataFilter)
     metadata = {
         '#_numerical_fields': 12,
         'uses_embedding': text_mode == 'embedding',
@@ -276,24 +276,12 @@ def transform_issues(issues, text_mode, pretrained_filepath: str):
     #assert len(embedding['data']) == len(issues)
     print('Building new issues')
     print(len(issues), len(word_data))
+    # 'metadata': createMetaDataFeatureArray(issue, metaDataFilter),
     for index in range(0, len(issues)):
         issue = issues[index]
         new_issue = {
             'text': word_data[index],
-            'metadata': [
-                issue['summary_length'],
-                issue['description_length'],
-                issue['comment_length'],
-                issue['#_comments'],
-                issue['#_attachments'],
-                issue['#_issuelinks'],
-                get_priority_index(issue['priority'].lower()),
-                issue['#_subtasks'],
-                issue['#_votes'],
-                issue['#_watches'],
-                issue['#_children'],
-                int(issue['has_parent'])
-            ],
+            'metadata': createMetaDataFeatureArray(issue, metaDataFilter),
             'labels': labels[index],
             'resolution': resolution[index],
             'issue_type': issue_type[index],
@@ -302,13 +290,77 @@ def transform_issues(issues, text_mode, pretrained_filepath: str):
     return new_issues, metadata
 
 
+def createMetaDataFeatureArray(issue, metaDataFilter):
+    features = []
+    if(metaDataFilter == 'summary_length' or metaDataFilter == 'all'):
+        features.append(issue['summary_length'])
+    else:
+        print("NOT")
+        features.append(0)
+    if(metaDataFilter == 'description_length' or metaDataFilter == 'all'):
+        features.append(issue['description_length'])
+    else:
+        print("NOT")
+        features.append(0)
+    if(metaDataFilter == 'comment_length' or metaDataFilter == 'all'):
+        features.append(issue['comment_length'])
+    else:
+        print("NOT")
+        features.append(0)
+    if(metaDataFilter == '#_comments' or metaDataFilter == 'all'):
+        features.append(issue['#_comments'])
+    else:
+        print("NOT")
+        features.append(0)
+    if(metaDataFilter == '#_attachments' or metaDataFilter == 'all'):
+        features.append(issue['#_attachments'])
+    else:
+        print("NOT")
+        features.append(0)
+    if(metaDataFilter == '#_issuelinks' or metaDataFilter == 'all'):
+        features.append(issue['#_issuelinks'])
+    else:
+        print("NOT")
+        features.append(0)
+    if(metaDataFilter == 'priority' or metaDataFilter == 'all'):
+        features.append(get_priority_index(issue['priority'].lower()))
+    else:
+        print("NOT")
+        features.append(0)
+    if(metaDataFilter == '#_subtasks' or metaDataFilter == 'all'):
+        features.append(issue['#_subtasks'])
+    else:
+        print("NOT")
+        features.append(0)
+    if(metaDataFilter == '#_votes' or metaDataFilter == 'all'):
+        features.append(issue['#_votes'])
+    else:
+        print("NOT")
+        features.append(0)
+    if(metaDataFilter == '#_watches' or metaDataFilter == 'all'):
+        features.append(issue['#_watches'])
+    else:
+        print("NOT")
+        features.append(0)
+    if(metaDataFilter == '#_children' or metaDataFilter == 'all'):
+        features.append(issue['#_children'])
+    else:
+        print("NOT")
+        features.append(0)
+    if(metaDataFilter == 'has_parent' or metaDataFilter == 'all'):
+        features.append(issue['has_parent'])
+    else:
+        print("NOT")
+        features.append(0)
+    return features
+
 ##############################################################################
 ##############################################################################
 # Main Function
 ##############################################################################
 
 
-def main(files: list[str], text_mode, pretrained_filepath: str):
+def main(files: list[str], text_mode, pretrained_filepath: str, metaDataFilter: str):
     # Preprocessing steps:
     #   1) Extract vocabulary
     #   2) Filter vocabulary
@@ -323,7 +375,7 @@ def main(files: list[str], text_mode, pretrained_filepath: str):
         with open(filename) as file:
             issues += json.load(file)
     print('Processing issues')
-    new_issues, metadata = transform_issues(issues, text_mode, pretrained_filepath)
+    new_issues, metadata = transform_issues(issues, text_mode, pretrained_filepath, metaDataFilter)
     print('Saving new issues')
     with open('transformed.json', 'w') as file:
         json.dump(new_issues, file)
@@ -347,8 +399,10 @@ if __name__ == '__main__':
                         )
     parser.add_argument('--pretrained-filepath', type=str, default='',
                         help='Give the file path to a pretrained word2vec file')
+    parser.add_argument('--metadata-filter', type=str, default='all',
+                        help='Can be one of the following: "all","summary_length","description_length","comment_length","#_comments","#_attachments","#_issuelinks","priority","#_subtasks","#_votes","#_watches","#_children","has_parent"')
     args = parser.parse_args()
     if args.text_mode not in ('embedding', 'matrix', 'document', 'bag'):
         print('Invalid --text-mode:', args.text_mode)
         sys.exit()
-    main(args.files, args.text_mode, args.pretrained_filepath)
+    main(args.files, args.text_mode, args.pretrained_filepath, args.metadata_filter)

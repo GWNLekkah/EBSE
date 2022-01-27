@@ -11,6 +11,7 @@ import os
 import random
 import statistics
 import sys
+import store_data as dataStorage
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -658,7 +659,8 @@ def main(output_mode: str,
          validation_size: float,
          epochs: int,
          mode: str,
-         do_dump: bool):
+         do_dump: bool,
+         metadata_filter: str):
     word_embedding, metadata, issue_labels, issue_types, resolutions = load_raw_data()
     features = list(make_feature_vectors(metadata,
                                          issue_labels,
@@ -744,12 +746,25 @@ def main(output_mode: str,
 
         for _ in range(15):
             print()
+
+        acc = 0
+        prec = 0
+        call = 0
+        fScore= 0
         for key in ['accuracy', 'precision', 'recall', 'f-score']:
-            # TODO: Call StorageFunction
             stat_data = [metrics[key][-1] for metrics in results]
             print('-' * 72)
             print(key.capitalize())
-            print('    * Mean:', statistics.mean(stat_data))
+            val = statistics.mean(stat_data)
+            print('    * Mean:', val)
+            if(key == 'accuracy'):
+                acc = val
+            if(key == 'precision'):
+                prec = val
+            if(key == 'recall'):
+                call = val
+            if(key == 'f-score'):
+                fScore = val
             try:
                 print('    * Geometric Mean:', statistics.geometric_mean(stat_data))
             except statistics.StatisticsError:
@@ -757,6 +772,7 @@ def main(output_mode: str,
             #print('    * Harmonic Mean:', statistics.geometric_mean(stat_data))
             print('    * Standard Deviation:', statistics.stdev(stat_data))
             print('    * Median:', statistics.median(stat_data))
+        dataStorage.storeDate(acc, prec, call, fScore, metadata_filter)
 
 
 ##############################################################################
@@ -791,6 +807,8 @@ if __name__ == '__main__':
                         help=('Dump data of the training mode. '
                               'Only available with --cross normal')
                         )
+    parser.add_argument('--metadata-filter', type=str, default='all',
+                        help='Can be one of the following: "all","summary_length","description_length","comment_length","#_comments","#_attachments","#_issuelinks","priority","#_subtasks","#_votes","#_watches","#_children","has_parent"')
     args = parser.parse_args()
     if args.mode not in ('metadata', 'text', 'rnn', 'embedding-cnn', 'all'):
         print('Invalid mode:', args.mode)
@@ -808,4 +826,5 @@ if __name__ == '__main__':
          args.validation_split_size,
          args.epochs,
          args.mode,
-         args.dump)
+         args.dump,
+         args.metadata_filter)
