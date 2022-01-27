@@ -114,7 +114,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--pretrained-filepath', type=str, default='',
                         help='Give the filepath to a pretrained word2vec file')
-    parser.add_argument('--pretrained-binary', type=bool, default=True,
+    parser.add_argument('--pretrained-binary', type=bool, default=False,
                         help='Set whether the precomputed word2vec is a binary file')
     parser.add_argument('--max-description-length', type=int, default=1000,
                         help='Set the maximum length of a description')

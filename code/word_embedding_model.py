@@ -21,6 +21,18 @@ from numpy import asarray
 from numpy import zeros
 import keras.activations
 import keras.callbacks
+#from tensorflow.keras.utils import plot_model
+from keras.utils.vis_utils import plot_model
+
+
+def do_plot_model(model):
+    plot_model(model,
+               show_dtype=False,
+               show_shapes=True,
+               expand_nested=False,
+               show_layer_names=False,
+               show_layer_activations=True,
+               to_file='model.png')
 
 
 BATCH_SIZE = 32
@@ -116,7 +128,7 @@ def get_model(input_mode, output_mode, embedding_vectors, input_info):
 
 def get_text_model(output_mode: str, embedding_vectors, info, do_compile=True):
     if embedding_vectors is not None:
-        text_inputs = tf.keras.layers.Embedding(info['embedding']['vocab_size'], 100,
+        text_inputs = tf.keras.layers.Embedding(info['embedding']['vocab_size'], 1000,
                                             weights=[embedding_vectors],
                                             input_length=info['embedding']['sequence_len'])
         hidden = tf.keras.layers.Conv1D(filters=32, kernel_size=8,
@@ -193,7 +205,7 @@ def get_rnn_model(output_mode: str):
 
     model = tf.keras.models.Sequential()
     model.add(tf.keras.layers.Embedding(len(loaded_glove), 300, weights=[loaded_glove],
-                                        input_length=100, trainable=True))
+                                        input_length=1000, trainable=True))
 
     model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64)))
     model.add(tf.keras.layers.Dense(64, activation='relu'))
@@ -224,7 +236,7 @@ def get_embedding_cnn_model(output_mode: str):
 
     model = tf.keras.models.Sequential()
     model.add(tf.keras.layers.Embedding(len(loaded_glove), 300, weights=[loaded_glove],
-                                        input_length=100, trainable=True))
+                                        input_length=1000, trainable=True))
 
     model.add(tf.keras.layers.Conv1D(filters=32, kernel_size=3, activation='relu'))
     model.add(tf.keras.layers.MaxPooling1D(pool_size=1))
@@ -608,7 +620,7 @@ def train_and_test_model(model,
             self.__precision.append(precision_)
             self.__recall.append(recall_)
             if precision_ + recall_ == 0:
-                self.__f_score.append(float('nan'))
+                self.__f_score.append(0)
             else:
                 self.__f_score.append(2*precision_*recall_ / (recall_ + precision_))
             print(f'Test accuracy ({epoch}):', accuracy_)
@@ -658,7 +670,8 @@ def main(output_mode: str,
          validation_size: float,
          epochs: int,
          mode: str,
-         do_dump: bool):
+         do_dump: bool,
+         do_plot: bool):
     word_embedding, metadata, issue_labels, issue_types, resolutions = load_raw_data()
     features = list(make_feature_vectors(metadata,
                                          issue_labels,
@@ -703,6 +716,8 @@ def main(output_mode: str,
                                                                              test_size,
                                                                              validation_size)
         model = get_model(mode, output_mode, embedding_vectors, info)
+        if do_plot:
+            return do_plot_model(model)
         metrics = train_and_test_model(model, dataset_train, dataset_val, dataset_test, epochs)
         if do_dump:
             with open('model-metrics.json', 'w') as file:
@@ -734,6 +749,8 @@ def main(output_mode: str,
             test_fold, fold, dataset_train, dataset_val, dataset_test = iteration
             print(f'Test Set: {test_fold} | Fold: {fold}')
             model = get_model(mode, output_mode, embedding_vectors, info)
+            if do_plot:
+                return do_plot_model(model)
 
             metrics = train_and_test_model(model,
                                            dataset_train,
@@ -790,6 +807,8 @@ if __name__ == '__main__':
                         help=('Dump data of the training mode. '
                               'Only available with --cross normal')
                         )
+    parser.add_argument('--plot', action='store_true', default=False,
+                        help='Skip training phase. Plots model')
     args = parser.parse_args()
     if args.mode not in ('metadata', 'text', 'rnn', 'embedding-cnn', 'all'):
         print('Invalid mode:', args.mode)
@@ -807,4 +826,5 @@ if __name__ == '__main__':
          args.validation_split_size,
          args.epochs,
          args.mode,
-         args.dump)
+         args.dump,
+         args.plot)
