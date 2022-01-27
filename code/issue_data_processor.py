@@ -279,12 +279,30 @@ def transform_issues(issues, text_mode, pretrained_filepath: str, metaDataFilter
     # 'metadata': createMetaDataFeatureArray(issue, metaDataFilter),
     for index in range(0, len(issues)):
         issue = issues[index]
+        if(metaDataFilter == 'labels' or metaDataFilter == 'all'):
+            labels_feature = labels[index]
+        else:
+            temp = labels[index]
+            labels_feature = [0]*len(temp)
+            
+        if(metaDataFilter == 'resolution' or metaDataFilter == 'all'):
+            resolution_feature = resolution[index]
+        else:
+            temp = resolution[index]
+            resolution_feature = [0]*len(temp)
+
+        if(metaDataFilter == 'issue_type' or metaDataFilter == 'all'):
+            issue_type_feature = issue_type[index]
+        else:
+            temp = issue_type[index]
+            issue_type_feature = [0]*len(temp)
+
         new_issue = {
             'text': word_data[index],
             'metadata': createMetaDataFeatureArray(issue, metaDataFilter),
-            'labels': labels[index],
-            'resolution': resolution[index],
-            'issue_type': issue_type[index],
+            'labels': labels_feature,
+            'resolution': resolution_feature,
+            'issue_type': issue_type_feature,
         }
         new_issues.append(new_issue)
     return new_issues, metadata
@@ -295,62 +313,50 @@ def createMetaDataFeatureArray(issue, metaDataFilter):
     if(metaDataFilter == 'summary_length' or metaDataFilter == 'all'):
         features.append(issue['summary_length'])
     else:
-        print("NOT")
         features.append(0)
     if(metaDataFilter == 'description_length' or metaDataFilter == 'all'):
         features.append(issue['description_length'])
     else:
-        print("NOT")
         features.append(0)
     if(metaDataFilter == 'comment_length' or metaDataFilter == 'all'):
         features.append(issue['comment_length'])
     else:
-        print("NOT")
         features.append(0)
     if(metaDataFilter == '#_comments' or metaDataFilter == 'all'):
         features.append(issue['#_comments'])
     else:
-        print("NOT")
         features.append(0)
     if(metaDataFilter == '#_attachments' or metaDataFilter == 'all'):
         features.append(issue['#_attachments'])
     else:
-        print("NOT")
         features.append(0)
     if(metaDataFilter == '#_issuelinks' or metaDataFilter == 'all'):
         features.append(issue['#_issuelinks'])
     else:
-        print("NOT")
         features.append(0)
     if(metaDataFilter == 'priority' or metaDataFilter == 'all'):
         features.append(get_priority_index(issue['priority'].lower()))
     else:
-        print("NOT")
         features.append(0)
     if(metaDataFilter == '#_subtasks' or metaDataFilter == 'all'):
         features.append(issue['#_subtasks'])
     else:
-        print("NOT")
         features.append(0)
     if(metaDataFilter == '#_votes' or metaDataFilter == 'all'):
         features.append(issue['#_votes'])
     else:
-        print("NOT")
         features.append(0)
     if(metaDataFilter == '#_watches' or metaDataFilter == 'all'):
         features.append(issue['#_watches'])
     else:
-        print("NOT")
         features.append(0)
     if(metaDataFilter == '#_children' or metaDataFilter == 'all'):
         features.append(issue['#_children'])
     else:
-        print("NOT")
         features.append(0)
-    if(metaDataFilter == 'has_parent' or metaDataFilter == 'all'):
+    if(metaDataFilter == 'parent_status' or metaDataFilter == 'all'):
         features.append(issue['has_parent'])
     else:
-        print("NOT")
         features.append(0)
     return features
 
@@ -400,7 +406,7 @@ if __name__ == '__main__':
     parser.add_argument('--pretrained-filepath', type=str, default='',
                         help='Give the file path to a pretrained word2vec file')
     parser.add_argument('--metadata-filter', type=str, default='all',
-                        help='Can be one of the following: "all","summary_length","description_length","comment_length","#_comments","#_attachments","#_issuelinks","priority","#_subtasks","#_votes","#_watches","#_children","has_parent"')
+                        help='Can be one of the following: "all","summary_length","description_length","comment_length","#_comments","#_attachments","#_issuelinks","priority","#_subtasks","#_votes","#_watches","#_children","parent_status", "labels","resolution", "issue_type')
     args = parser.parse_args()
     if args.text_mode not in ('embedding', 'matrix', 'document', 'bag'):
         print('Invalid --text-mode:', args.text_mode)

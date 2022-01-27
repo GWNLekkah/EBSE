@@ -609,7 +609,7 @@ def train_and_test_model(model,
             self.__precision.append(precision_)
             self.__recall.append(recall_)
             if precision_ + recall_ == 0:
-                self.__f_score.append(float('nan'))
+                self.__f_score.append(0)
             else:
                 self.__f_score.append(2*precision_*recall_ / (recall_ + precision_))
             print(f'Test accuracy ({epoch}):', accuracy_)
@@ -759,12 +759,16 @@ def main(output_mode: str,
             print('    * Mean:', val)
             if(key == 'accuracy'):
                 acc = val
+                acc_std = statistics.stdev(stat_data)
             if(key == 'precision'):
                 prec = val
+                prec_std = statistics.stdev(stat_data)
             if(key == 'recall'):
                 call = val
+                call_std = statistics.stdev(stat_data)
             if(key == 'f-score'):
                 fScore = val
+                fScore_std = statistics.stdev(stat_data)
             try:
                 print('    * Geometric Mean:', statistics.geometric_mean(stat_data))
             except statistics.StatisticsError:
@@ -772,7 +776,7 @@ def main(output_mode: str,
             #print('    * Harmonic Mean:', statistics.geometric_mean(stat_data))
             print('    * Standard Deviation:', statistics.stdev(stat_data))
             print('    * Median:', statistics.median(stat_data))
-        dataStorage.storeDate(acc, prec, call, fScore, metadata_filter)
+        dataStorage.storeDate(acc, acc_std,  prec, prec_std, call, call_std, fScore, fScore_std, metadata_filter, output_mode)
 
 
 ##############################################################################
