@@ -291,7 +291,7 @@ def transform_issues(issues, text_mode, pretrained_filepath: str, metaDataFilter
             temp = resolution[index]
             resolution_feature = [0]*len(temp)
 
-        if(metaDataFilter == 'issue_type' or metaDataFilter == 'all'):
+        if(metaDataFilter == 'issue_type' or metaDataFilter == 'all' or metaDataFilter == 'collection-1'):
             issue_type_feature = issue_type[index]
         else:
             temp = issue_type[index]
@@ -354,7 +354,7 @@ def createMetaDataFeatureArray(issue, metaDataFilter):
         features.append(issue['#_children'])
     else:
         features.append(0)
-    if(metaDataFilter == 'parent_status' or metaDataFilter == 'all'):
+    if(metaDataFilter == 'parent_status' or metaDataFilter == 'all' or metaDataFilter == 'collection-1'):
         features.append(issue['has_parent'])
     else:
         features.append(0)
@@ -406,7 +406,7 @@ if __name__ == '__main__':
     parser.add_argument('--pretrained-filepath', type=str, default='',
                         help='Give the file path to a pretrained word2vec file')
     parser.add_argument('--metadata-filter', type=str, default='all',
-                        help='Can be one of the following: "all","summary_length","description_length","comment_length","#_comments","#_attachments","#_issuelinks","priority","#_subtasks","#_votes","#_watches","#_children","parent_status", "labels","resolution", "issue_type')
+                        help='Can be one of the following: "all","summary_length","description_length","comment_length","#_comments","#_attachments","#_issuelinks","priority","#_subtasks","#_votes","#_watches","#_children","parent_status", "labels","resolution", "issue_type", "collection-1"', )
     args = parser.parse_args()
     if args.text_mode not in ('embedding', 'matrix', 'document', 'bag'):
         print('Invalid --text-mode:', args.text_mode)

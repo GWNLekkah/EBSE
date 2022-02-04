@@ -61,3 +61,6 @@ python word_embedding_model.py --metadata-filter "issue_type" --mode metadata --
 python issue_data_processor.py --text-mode bag --metadata-filter "parent_status" ./issuedata_extractor/architectural_issues.json ./issuedata_extractor/non_architectural_issues.json
 python word_embedding_model.py --metadata-filter "parent_status" --mode metadata --output binary --cross test
 python word_embedding_model.py --metadata-filter "parent_status" --mode metadata --output three --cross test
+
+python issue_data_processor.py --text-mode bag --metadata-filter "collection-1" ./issuedata_extractor/architectural_issues.json ./issuedata_extractor/non_architectural_issues.json
+python word_embedding_model.py --metadata-filter "collection-1" --mode metadata --output binary --cross test

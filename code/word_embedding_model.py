@@ -812,7 +812,7 @@ if __name__ == '__main__':
                               'Only available with --cross normal')
                         )
     parser.add_argument('--metadata-filter', type=str, default='all',
-                        help='Can be one of the following: "all","summary_length","description_length","comment_length","#_comments","#_attachments","#_issuelinks","priority","#_subtasks","#_votes","#_watches","#_children","has_parent"')
+                        help='Can be one of the following: "all","summary_length","description_length","comment_length","#_comments","#_attachments","#_issuelinks","priority","#_subtasks","#_votes","#_watches","#_children","has_parent", "collection-1')
     args = parser.parse_args()
     if args.mode not in ('metadata', 'text', 'rnn', 'embedding-cnn', 'all'):
         print('Invalid mode:', args.mode)
