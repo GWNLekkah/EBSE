@@ -1,3 +1,5 @@
+# Helper file for installing NLTK stuff
+
 import nltk
 nltk.download('stopwords')
 nltk.download('punkt')

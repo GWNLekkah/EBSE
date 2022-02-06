@@ -1,3 +1,5 @@
+# Helper file to show the output of the --dump parameters
+
 import json
 import matplotlib.pyplot as pyplot
 

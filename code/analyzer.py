@@ -1,3 +1,5 @@
+# Auxiliary file for exploratory analysis of data
+
 import collections
 import json
 
