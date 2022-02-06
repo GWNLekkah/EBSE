@@ -7,7 +7,7 @@ This projects makes use of python 3.9
 
 ### Installation
 The code makes use of the following modules:
-First Header  | 
+Modules  | 
 ------------- | 
 numpy  |
 tensorflow  |
@@ -36,7 +36,7 @@ python nltk_downloads.py
 
 to install the appropriate NLTK corpora.
 ### Preparation
-This section describes the commands have to be executed once in order for the program to work.
+This section describes the commands that have to be executed once in order for the program to work.
 
 #### Fetching Issue data 
 **Note: issue data has already been fetched in this version of the repository.**
@@ -114,7 +114,7 @@ optional arguments:
 ```
 
 Most arguments are fairly well explained in this text. 
-The most complicated one is `--mode`. Is specified the type of model used:
+The most complicated one is `--mode`. This specifies the type of model used:
 metadata only, text only, or a mixed model. For text encoded using `bag`, `document`,
 or `matrix`, the program automatically detects the encoding and used the appropriate model.
 Note that these are also the only encodings which can currently be used for the mixed model.
