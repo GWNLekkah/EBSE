@@ -39,7 +39,7 @@ def main():
 
     dt = read_csv(args.csv_path)
 
-    jira = JIRA(APACHE_JIRA_SERVER, basic_auth=('Mohamed_Soliman', 'Smbam@2005'))
+    jira = JIRA(APACHE_JIRA_SERVER, basic_auth=(USERNAME, PASSWORD))
     
     keys_dic = key_dic(dt.keys(),jira)
 

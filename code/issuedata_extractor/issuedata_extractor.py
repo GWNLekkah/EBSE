@@ -37,8 +37,7 @@ def main():
 
     # Authenticate with the jira server
     print('athenticate with server')
-    jira = JIRA(APACHE_JIRA_SERVER, basic_auth=('Mohamed_Soliman',
-                                                'Smbam@2005'))
+    jira = JIRA(APACHE_JIRA_SERVER, basic_auth=(USERNAME, PASSWORD))
     # Store the issue keys in a comma separated string format
     keys_str = ','.join(dt.keys())
 
